@@ -1,0 +1,1 @@
+nohup python3 app.py > flask_logs&
