@@ -16,8 +16,6 @@ app.config['MONGODB_SETTINGS'] = {
 }
 db = MongoEngine()
 db.init_app(app)
-app.run(host=constants.flask_host, port=constants.flask_port)
-
 
 class Location(db.Document):
     location_id = db.IntField(required=True)  # type: int
@@ -80,3 +78,5 @@ class Media(db.Document):
 def auth():
     # redirected from: https://api.instagram.com/oauth/authorize/?client_id=1ce2ad36a097486984642c7d6db041ed&redirect_uri=https://ec2-54-71-98-189.us-west-2.compute.amazonaws.com:9000/authscope=basic+follower_list+comments+relationships+public_content+likes&response_type=code
     return insta_api.get_access_token(code=request.args.get('code'), redirect_url=request.url)
+
+app.run(host=constants.flask_host, port=constants.flask_port)
