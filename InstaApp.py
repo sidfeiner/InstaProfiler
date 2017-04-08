@@ -2,6 +2,7 @@
 from flask import Flask, request
 from flask_mongoengine import MongoEngine
 from conf import constants
+from datetime import datetime
 import insta_api
 
 __author__ = 'Sidney'
@@ -73,6 +74,13 @@ class Media(db.Document):
     location = db.ReferenceField(Location)  # type: Location
     taggees = db.ListField(db.ReferenceField(Taggee))  # type: list
 
+
+class Token(db.Document):
+    user_name = db.StringField(required=True)
+    user_id = db.IntField(required=True)
+    code = db.StringField(required=True)
+    access_token = db.StringField(required=True)
+    timestamp = db.DateTimeField(default=datetime.now)
 
 @app.route('/auth')
 def auth():

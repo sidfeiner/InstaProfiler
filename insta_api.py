@@ -1,5 +1,6 @@
 #-*- encoding: utf-8 -*-
 import requests
+from InstaApp import Media, User, Like, Comment, Location, Point, Taggee
 
 __author__ = 'Sidney'
 
@@ -20,4 +21,15 @@ def get_access_token(redirect_url, code):
         "code": code
     }
     resp = requests.post("https://api.instagram.com/oauth/access_token", data)
-    return resp['access_token']
+    print(resp.json())
+    return resp.json()['access_token']
+
+
+def get_medias(user_id, access_token: str) -> list[Media]:
+    """
+    :param user_id: User's ID that we want to get the medias from
+    :param access_token: Instagram Access Token
+    :return: List of media from that user
+    """
+    pass
+
