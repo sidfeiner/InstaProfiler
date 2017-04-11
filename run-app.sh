@@ -1,1 +1,1 @@
-sudo nohup python3 InstaApp.py > flask_logs&
+sudo nohup python3 InstaApp.py >> flask_logs.txt&
