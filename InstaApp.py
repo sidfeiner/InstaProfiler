@@ -76,7 +76,7 @@ class Media(db.Document):
 
 
 class Token(db.Document):
-    user_name = db.StringField(required=True)
+    username = db.StringField(required=True)
     user_id = db.IntField(required=True)
     code = db.StringField(required=True)
     access_token = db.StringField(required=True)
@@ -85,6 +85,13 @@ class Token(db.Document):
 @app.route('/auth')
 def auth():
     # redirected from: https://api.instagram.com/oauth/authorize/?client_id=1ce2ad36a097486984642c7d6db041ed&redirect_uri=https://ec2-54-71-98-189.us-west-2.compute.amazonaws.com:9000/authscope=basic+follower_list+comments+relationships+public_content+likes&response_type=code
-    return insta_api.get_access_token(code=request.args.get('code'), redirect_url=request.url)
+    token = insta_api.get_access_token(code=request.args.get('code'), redirect_url=request.url)
+    token.modify(
+        query={
+            "user_id": token.user_id,
+            "username": token.username
+        }
+    )
+    return token.access_token
 
 app.run(host=constants.flask_host, port=constants.flask_port)
