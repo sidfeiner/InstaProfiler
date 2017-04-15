@@ -1,8 +1,9 @@
 #-*- encoding: utf-8 -*-
 import requests
-from InstaApp import Media, User, Like, Comment, Location, Point, Taggee, Token
+from conf.flask import Media, User, Like, Comment, Location, Point, Taggee, Token
 
 __author__ = 'Sidney'
+
 
 def get_access_token(redirect_url: str, code: str) -> Token:
     """
