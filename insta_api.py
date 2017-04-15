@@ -2,6 +2,7 @@
 import requests
 from conf.flask import Media, User, Like, Comment, Location, Point, Taggee, Token
 from typing import List
+from LoggerManager import logger
 
 __author__ = 'Sidney'
 
@@ -13,11 +14,8 @@ class OAuthException(Exception):
 def get_access_token(redirect_url: str, code: str) -> Token:
     """
     :param redirect_url: URL to redirect to
-    :type redirect_url: str
     :param code: code received from the login
-    :type code: str
     :return: Full token
-    :rtype: Token
     """
     data = {
         "client_id": "1ce2ad36a097486984642c7d6db041ed",
@@ -26,6 +24,7 @@ def get_access_token(redirect_url: str, code: str) -> Token:
         "redirect_uri": redirect_url,
         "code": code
     }
+    logger.info("sent access token request with redirect_url: {0}".format(redirect_url))
     resp = requests.post("https://api.instagram.com/oauth/access_token", data)
     json_resp = resp.json()  # type: dict
     if 'error_type' in json_resp.keys():
