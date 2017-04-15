@@ -3,6 +3,7 @@ import requests
 from conf.flask import Media, User, Like, Comment, Location, Point, Taggee, Token
 from typing import List
 from LoggerManager import logger
+from urllib.parse import quote_plus
 
 __author__ = 'Sidney'
 
@@ -21,7 +22,7 @@ def get_access_token(redirect_url: str, code: str) -> Token:
         "client_id": "1ce2ad36a097486984642c7d6db041ed",
         "client_secret": "864932c554f342628a61913d4d3c8406",
         "grant_type": "authorization_code",
-        "redirect_uri": redirect_url,
+        "redirect_uri": quote_plus(redirect_url),
         "code": code
     }
     logger.info("sent access token request with redirect_url: {0}".format(redirect_url))
