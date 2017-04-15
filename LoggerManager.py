@@ -8,7 +8,7 @@ from datetime import datetime
 
 __author__ = "Sidney"
 
-logs_dir = "/.logs" if 'win' in sys.platform.lower() else constants.logging_dir_prod
+logs_dir = "./logs" if 'win' in sys.platform.lower() else constants.logging_dir_prod
 
 
 def init_file_handler(logger: logging.Logger, encoding="utf-8"):
@@ -20,11 +20,12 @@ def init_file_handler(logger: logging.Logger, encoding="utf-8"):
     if not os.path.exists(logs_dir):
         os.makedirs(logs_dir)
     handler = logging.FileHandler(file_path, encoding=encoding)
-    handler.setFormatter(format)
+    handler.setFormatter(log_format)
     logger.addHandler(handler)
 
 logger = logging.getLogger("InstaProfiler")
-format = logging.Formatter("%(asctime)s | %(levelno)s | $(module)s | %(lineno)s | %(message)s")
-print("Initiating handler in dir: {0}".format(logs_dir))
+logger.setLevel(logging.DEBUG)
+log_format = logging.Formatter("%(asctime)s | %(levelname)s | %(module)s | %(funcName)s | %(lineno)s | %(message)s")
+print("Initiating handler in dir: {0}".format(os.path.abspath(logs_dir)))
 init_file_handler(logger)
 print("Handler initiated")

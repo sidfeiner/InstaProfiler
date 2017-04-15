@@ -25,4 +25,6 @@ def auth():
     except insta_api.OAuthException as e:
         return jsonify({"error": e.type, "message": str(e)})
 
+
+logger.info("oh my god")
 app.run(host=constants.flask_host, port=constants.flask_port)
