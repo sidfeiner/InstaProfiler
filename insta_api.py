@@ -5,6 +5,10 @@ from typing import List
 
 __author__ = 'Sidney'
 
+class OAuthException(Exception):
+    def __init__(self, type, msg):
+        super(OAuthException, self).__init__(msg)
+        self.type = type
 
 def get_access_token(redirect_url: str, code: str) -> Token:
     """
@@ -24,6 +28,11 @@ def get_access_token(redirect_url: str, code: str) -> Token:
     }
     resp = requests.post("https://api.instagram.com/oauth/access_token", data)
     json_resp = resp.json()  # type: dict
+    if 'error_type' in json_resp.keys():
+        raise OAuthException(
+            json_resp.get("error_type", ""),
+            json_resp.get("error_message", "")
+        )
     access_token = json_resp['access_token']
     user = json_resp['user']
     user_id = user['id']
