@@ -1,5 +1,6 @@
 #-*- encoding: utf-8 -*-
 import requests
+from conf import constants
 from conf.flask import Media, User, Like, Comment, Location, Point, Taggee, Token
 from typing import List
 from LoggerManager import logger
@@ -18,14 +19,15 @@ def get_access_token(redirect_url: str, code: str) -> Token:
     :param code: code received from the login
     :return: Full token
     """
+    encoded_url = quote_plus(redirect_url)
     data = {
-        "client_id": "1ce2ad36a097486984642c7d6db041ed",
-        "client_secret": "864932c554f342628a61913d4d3c8406",
+        "client_id": constants.client_id,
+        "client_secret": constants.client_secret,
         "grant_type": "authorization_code",
-        "redirect_uri": quote_plus(redirect_url),
+        "redirect_uri": encoded_url,
         "code": code
     }
-    logger.info("sent access token request with redirect_url: {0}".format(redirect_url))
+    logger.info("sent access token request with redirect_url: {0}".format(encoded_url))
     resp = requests.post("https://api.instagram.com/oauth/access_token", data)
     json_resp = resp.json()  # type: dict
     if 'error_type' in json_resp.keys():
