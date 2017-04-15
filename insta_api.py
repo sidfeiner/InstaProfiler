@@ -1,7 +1,7 @@
 #-*- encoding: utf-8 -*-
 import requests
 from conf.flask import Media, User, Like, Comment, Location, Point, Taggee, Token
-from typing import List, Text
+from typing import List
 
 __author__ = 'Sidney'
 
