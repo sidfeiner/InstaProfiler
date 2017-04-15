@@ -1,1 +1,1 @@
-sudo pkill -f InstaApp.py
+sudo sh  -c 'pkill -f InstaApp.py'
