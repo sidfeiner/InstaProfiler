@@ -3,7 +3,7 @@ import logging
 from conf import constants
 import sys
 import os
-from InstaApp import app
+from conf.flask import app
 from datetime import datetime
 
 __author__ = "Sidney"
@@ -25,6 +25,6 @@ def init_file_handler(logger: logging.Logger, encoding="utf-8"):
 
 logger = logging.getLogger("InstaProfiler")
 format = logging.Formatter("%(asctime)s | %(levelno)s | $(module)s | %(lineno)s | %(message)s")
-print("Initiating handler")
+print("Initiating handler in dir: {0}".format(logs_dir))
 init_file_handler(logger)
 print("Handler initiated")

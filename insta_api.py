@@ -1,6 +1,7 @@
 #-*- encoding: utf-8 -*-
 import requests
 from conf.flask import Media, User, Like, Comment, Location, Point, Taggee, Token
+from typing import List, Text
 
 __author__ = 'Sidney'
 
@@ -30,7 +31,7 @@ def get_access_token(redirect_url: str, code: str) -> Token:
     return Token(access_token=access_token, user_id=user_id, username=username, code=code)
 
 
-def get_medias(user_id, access_token: str) -> list[Media]:
+def get_medias(user_id, access_token: str) -> List[Media]:
     """
     :param user_id: User's ID that we want to get the medias from
     :param access_token: Instagram Access Token
