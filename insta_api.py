@@ -19,7 +19,7 @@ def get_access_token(redirect_url: str, code: str) -> Token:
     :param code: code received from the login
     :return: Full token
     """
-    encoded_url = quote_plus(redirect_url.split("?")[0])
+    encoded_url = redirect_url.split("?")[0]
     data = {
         "client_id": constants.client_id,
         "client_secret": constants.client_secret,
