@@ -9,7 +9,7 @@ def save_token(token: Token) -> bool:
     :return: True if new, False if updated
     """
     result = False
-    if Token.objects.filter(pk=token.user_id) is None:
+    if Token.objects.filter(pk=token.user_id).first() is None:
         # Doesn't exist yet
         token.save()
         result = True
