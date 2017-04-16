@@ -6,7 +6,7 @@ from datetime import datetime
 
 __author__ = "Sidney"
 
-app = Flask(__name__)
+app = Flask("InstaProfiler")
 app.config['MONGODB_SETTINGS'] = {
     'db': 'app',
     'host': constants.mongo_host,
@@ -30,7 +30,7 @@ class Point(db.Document):
 
 
 class User(db.Document):
-    user_id = db.StringField(required=True)
+    user_id = db.StringField(required=True, primary_key=True)
     user_name = db.StringField(required=True)
     full_name = db.StringField(required=False)  # type: str
     website = db.StringField(required=False)  # type: str
@@ -76,7 +76,7 @@ class Media(db.Document):
 
 class Token(db.Document):
     username = db.StringField(required=True)
-    user_id = db.IntField(required=True)
+    user_id = db.IntField(required=True, primary_key=True)
     code = db.StringField(required=True)
     access_token = db.StringField(required=True)
     timestamp = db.DateTimeField(default=datetime.now)
