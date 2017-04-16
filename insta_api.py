@@ -19,7 +19,7 @@ def get_access_token(redirect_url: str, code: str) -> Token:
     :param code: code received from the login
     :return: Full token
     """
-    encoded_url = quote_plus(redirect_url)
+    encoded_url = quote_plus(redirect_url.split("?")[0])
     data = {
         "client_id": constants.client_id,
         "client_secret": constants.client_secret,
@@ -29,6 +29,7 @@ def get_access_token(redirect_url: str, code: str) -> Token:
     }
     logger.info("sent access token request with redirect_url: {0}".format(encoded_url))
     resp = requests.post("https://api.instagram.com/oauth/access_token", data)
+
     json_resp = resp.json()  # type: dict
     if 'error_type' in json_resp.keys():
         raise OAuthException(

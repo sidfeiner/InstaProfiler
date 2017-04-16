@@ -11,7 +11,7 @@ __author__ = 'Sidney'
 @app.route('/auth/')
 def auth():
     code = request.args.get('code')
-    # redirected from: https://api.instagram.com/oauth/authorize/?client_id=1ce2ad36a097486984642c7d6db041ed&redirect_uri=http%3A%2F%2Fec2-54-71-98-189.us-west-2.compute.amazonaws.com%3A9000%2Fauth%2F&scope=basic+follower_list+comments+relationships+public_content+likes&response_type=code
+    # redirected from: https://api.instagram.com/oauth/authorize/?client_id=81c816e7c7414edcb82b19a9f40867c1&redirect_uri=http%3A%2F%2Fec2-54-71-98-189.us-west-2.compute.amazonaws.com%3A9000%2Fauth&scope=likes+comments&response_type=code
     try:
         token = insta_api.get_access_token(code=code, redirect_url=request.url)
         token.modify(
