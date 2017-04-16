@@ -4,7 +4,6 @@ from conf import constants
 from conf.flask import Media, User, Like, Comment, Location, Point, Taggee, Token
 from typing import List
 from LoggerManager import logger
-from urllib.parse import quote_plus
 
 __author__ = 'Sidney'
 
@@ -12,6 +11,11 @@ class OAuthException(Exception):
     def __init__(self, type, msg):
         super(OAuthException, self).__init__(msg)
         self.type = type
+
+
+API_URL = "https://api.instagram.com"
+VERSION = "v1"
+USERS_ENDPOINT = "users"
 
 def get_access_token(redirect_url: str, code: str) -> Token:
     """
@@ -43,6 +47,34 @@ def get_access_token(redirect_url: str, code: str) -> Token:
     return Token(access_token=access_token, user_id=user_id, username=username, code=code)
 
 
+def enrich_user(user: User, access_token: str) -> User:
+    """
+    :param user: user's ID
+    :param access_token: Access Token given by instagram
+    :return: User with all relevant infos
+    """
+    url = "{domain}/{version}/{path}/{id}?access_token={token}".format(
+        domain=API_URL,
+        version=VERSION,
+        path=USERS_ENDPOINT,
+        id=user.user_id,
+        token=access_token
+    )
+    response_json = requests.get(url).json()['data']
+
+    user.user_name = response_json['username']
+    user.full_name = response_json['full_name']
+    user.bio = response_json['bio']
+    user.website = response_json['website']
+
+    counts = response_json['counts']
+    user.media_count = counts['media']
+    user.follows_count = counts['follows']
+    user.followed_by_count = counts['followed_by']
+
+    return user
+
+
 def get_medias(user_id, access_token: str) -> List[Media]:
     """
     :param user_id: User's ID that we want to get the medias from
@@ -51,3 +83,7 @@ def get_medias(user_id, access_token: str) -> List[Media]:
     """
     pass
 
+user = User(user_id='31457967', user_name="sid802", full_name="Sidney Feiner")
+print(user.followed_by_count)
+enrich_user(user, "31457967.81c816e.0d2576dde14943b5ab91d02d8a9b0f02")
+print(user.followed_by_count)
