@@ -2,36 +2,57 @@
 from flask import Flask
 from flask_mongoengine import MongoEngine
 from conf import constants
+from json import dumps
 from datetime import datetime
 
 __author__ = "Sidney"
 
 app = Flask("InstaProfiler")
 app.config['MONGODB_SETTINGS'] = {
-    'db': 'app',
+    'db': 'dominos',
     'host': constants.mongo_host,
-    'port': 27017,
+    'port': constants.mongo_port,
     'username': constants.mongo_user,
     'password': constants.mongo_pwd
 }
 db = MongoEngine()
 db.init_app(app)
 
+
+class DeserializableDocument(db.Document):
+    @classmethod
+    def from_dict(cls, data_dict):
+        """
+        turn dict to json string, and use built-in from_json method
+        """
+        json_str = dumps(data_dict)
+        return cls.from_json(json_str)
+
+
 class Location(db.Document):
     location_id = db.IntField(required=True)  # type: int
-    lat = db.FloatField()  # type: float
-    lon = db.FloatField()  # type: float
+    latitude = db.FloatField()  # type: float
+    longitude = db.FloatField()  # type: float
     name = db.StringField(required=False)  # type: str
 
+    @classmethod
+    def from_dict(cls, data_dict: dict):
+        """
+        :param loc_dict: dict with following keys: latitude, longitude, name, id
+        :return: Location instance
+        """
+        data_dict['location_id'] = data_dict['id']
+        return super(Location, cls).from_dict(data_dict)
 
-class Point(db.Document):
+
+class Point(db.EmbeddedDocument):
     x = db.FloatField()
     y = db.FloatField()
 
 
 class User(db.Document):
-    user_id = db.StringField(required=True, primary_key=True)
-    user_name = db.StringField(required=True)
+    id = db.StringField(required=True, primary_key=True)
+    username = db.StringField(required=True)
     full_name = db.StringField(required=False)  # type: str
     website = db.StringField(required=False)  # type: str
     bio = db.StringField(required=False)  # type: str
@@ -42,10 +63,26 @@ class User(db.Document):
     follows = db.ListField(db.StringField(), required=False)  # type: list
     media = db.ListField(db.StringField(), required=False)  # type: list
 
+    @classmethod
+    def from_dict(cls, data_dict: dict, counts_dict: dict):
+        data_dict['media_count'] = counts_dict['media']
+        data_dict['follows_count'] = counts_dict['follows']
+        data_dict['followed_by_count'] = counts_dict['followed_by']
+        return super(User, cls).from_dict(data_dict)
 
-class Taggee(db.Document):
+
+class Taggee(db.EmbeddedDocument):
     user = db.ReferenceField(User)  # type: User
-    position = db.ReferenceField(Point)  # type: Point
+    position = db.EmbeddedDocumentField(Point)  # type: Point
+
+    @classmethod
+    def from_dict(cls, data_dict: dict):
+        temp_user = User.from_dict(data_dict['user'], {})
+        if User.objects.filter(pk=temp_user.pk).first() is None:
+            temp_user.save()
+        return super(Taggee, cls).from_dict()
+
+
 
 
 class Comment(db.Document):
@@ -71,7 +108,7 @@ class Media(db.Document):
     likes = db.ListField(db.ReferenceField(Like))  # type: list
     tags = db.ListField(db.StringField())  # type: list
     location = db.ReferenceField(Location)  # type: Location
-    taggees = db.ListField(db.ReferenceField(Taggee))  # type: list
+    taggees = db.ListField(db.EmbeddedDocumentField(Taggee))  # type: list
 
 
 class Token(db.Document):

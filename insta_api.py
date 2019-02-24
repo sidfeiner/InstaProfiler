@@ -1,9 +1,9 @@
 #-*- encoding: utf-8 -*-
 import requests
 from conf import constants
-from conf.flask import Media, User, Like, Comment, Location, Point, Taggee, Token
+from conf.flask import Media, User, Location, Token
 from typing import List
-from LoggerManager import logger
+from common.LoggerManager import logger
 
 __author__ = 'Sidney'
 
@@ -16,6 +16,7 @@ class OAuthException(Exception):
 API_URL = "https://api.instagram.com"
 VERSION = "v1"
 USERS_ENDPOINT = "users"
+USER_RECENT_MEDIA = "users/self/media/recent"
 
 def get_access_token(redirect_url: str, code: str) -> Token:
     """
@@ -28,7 +29,7 @@ def get_access_token(redirect_url: str, code: str) -> Token:
         "client_id": constants.client_id,
         "client_secret": constants.client_secret,
         "grant_type": "authorization_code",
-        "redirect_uri": encoded_url,
+            "redirect_uri": encoded_url,
         "code": code
     }
     logger.info("sent access token request with redirect_url: {0}".format(encoded_url))
@@ -57,12 +58,13 @@ def enrich_user(user: User, access_token: str) -> User:
         domain=API_URL,
         version=VERSION,
         path=USERS_ENDPOINT,
-        id=user.user_id,
+        id=user.id,
         token=access_token
     )
     response_json = requests.get(url).json()['data']
 
-    user.user_name = response_json['username']
+    user = User.from_dict()
+    user.username = response_json['username']
     user.full_name = response_json['full_name']
     user.bio = response_json['bio']
     user.website = response_json['website']
@@ -81,9 +83,20 @@ def get_medias(user_id, access_token: str) -> List[Media]:
     :param access_token: Instagram Access Token
     :return: List of media from that user
     """
-    pass
+    url = "{domain}/{version}/{path}?access_token={token}".format(
+        domain=API_URL,
+        version=VERSION,
+        path=USER_RECENT_MEDIA,
+        token=access_token
+    )
 
-user = User(user_id='31457967', user_name="sid802", full_name="Sidney Feiner")
-print(user.followed_by_count)
-enrich_user(user, "31457967.81c816e.0d2576dde14943b5ab91d02d8a9b0f02")
-print(user.followed_by_count)
+    response_data = requests.get(url).json()['data']
+    for data_media in response_data:  # type: dict
+        media_id = data_media['id']
+        author = data_media['user']['id']
+        created_timestamp = data_media['created_time']
+        comments_count = data_media['comments']['count']
+        likes_count = data_media['likes']['count']
+        tags = data_media['tags']
+        location = Location.from_dict(data_media['location'])
+        #taggees =

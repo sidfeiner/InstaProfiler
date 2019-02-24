@@ -3,8 +3,7 @@ from flask import request, jsonify
 from conf import constants
 from conf.flask import app
 import insta_api
-from LoggerManager import logger
-from data import MongoDao
+from common.LoggerManager import logger
 
 __author__ = 'Sidney'
 
