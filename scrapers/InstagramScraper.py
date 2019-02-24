@@ -2,7 +2,7 @@ from time import sleep
 import json
 from selenium.webdriver import Chrome, ChromeOptions
 from selenium.webdriver.remote.webdriver import WebDriver
-from common import LoggerManager
+from common.LoggerManager import LoggerManager
 from common.base import InstaUser
 
 CHROME_DRIVER_PATH = '/home/sid/personal/Projects/EMIReports/configs/lin/chromedriver'
@@ -24,7 +24,7 @@ class QueryHashes:
 
 class InstagramScraper(object):
     driver = None  # type: WebDriver
-    logger = LoggerManager.logger
+    logger = LoggerManager.get_logger(__name__)
 
     INSTA_URL = "https://www.instagram.com"
     GRAPH_URL = "{0}/graphql/query".format(INSTA_URL)

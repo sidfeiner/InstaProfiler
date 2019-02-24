@@ -1,38 +1,42 @@
-#-*-encoding: utf-8 -*-
 import logging
-from conf import constants
-import sys
-import os
-from conf.flask import app
-from datetime import datetime
-
-__author__ = "Sidney"
-
-logs_dir = "./logs" if 'win' in sys.platform.lower() else constants.logging_dir_prod
+from typing import Optional, Union
 
 
-def init_file_handler(logger: logging.Logger, encoding="utf-8"):
-    """
-    Append a file handler to the given logger
-    """
-    file_name = "{name}-{date}".format(name=app.name, date=datetime.now().strftime("%Y-%m-%d_%H-%M-%S"))
-    file_path = os.path.join(logs_dir, file_name)
-    if not os.path.exists(logs_dir):
-        os.makedirs(logs_dir)
-    handler = logging.FileHandler(file_path, encoding=encoding)
-    handler.setFormatter(log_format)
-    logger.addHandler(handler)
+class LoggerManager(object):
+    logger = None  # type: logging.Logger
+    is_init = False
+    loggers = {}
 
-def init_console_handler(logger: logging.Logger):
-    handler = logging.StreamHandler()
-    handler.setFormatter(log_format)
-    logger.addHandler(handler)
+    @classmethod
+    def init_console_handler(cls, formatter: logging.Formatter):
+        handler = logging.StreamHandler()
+        handler.setFormatter(formatter)
+        return handler
 
-logger = logging.getLogger("InstaProfiler")
-logger.setLevel(logging.DEBUG)
-log_format = logging.Formatter("%(asctime)s | %(levelname)s | %(module)s | %(funcName)s | %(lineno)s | %(message)s")
-print("Initiating handler in dir: {0}".format(os.path.abspath(logs_dir)))
-init_file_handler(logger)
-init_console_handler(logger)
-#logger.propagate = False
-print("Handler initiated")
+    @classmethod
+    def init(cls, file_path: Optional[str] = "./job.log", logger_name: Optional[str] = None, level: Union[int, str] = logging.DEBUG,
+             format_str: str = "%(asctime)s : %(threadName)s: %(levelname)s : %(name)s : %(module)s : %(message)s", with_console: bool = True):
+        if not cls.is_init:
+            logger = logging.getLogger(logger_name or "BaseLogger")
+            logger.setLevel(level)
+            formatter = logging.Formatter(format_str)
+
+            if file_path is not None:
+                file_handler = logging.FileHandler(file_path, encoding='utf-8')
+                file_handler.setFormatter(formatter)
+                logger.addHandler(file_handler)
+
+            if with_console:
+                logger.addHandler(cls.init_console_handler(formatter))
+
+            logger.propagate = False
+
+            cls.logger = logger
+            cls.is_init = True
+
+    @classmethod
+    def get_logger(cls, name: str) -> logging.Logger:
+        cls.init()
+        logger = cls.logger.getChild(name)  # type: logging.Logger
+        cls.loggers[name] = logger
+        return logger

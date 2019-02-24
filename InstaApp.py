@@ -3,10 +3,11 @@ from flask import request, jsonify
 from conf import constants
 from conf.flask import app
 import insta_api
-from common.LoggerManager import logger
+from common.LoggerManager import LoggerManager
 
 __author__ = 'Sidney'
 
+logger = LoggerManager.get_logger('InstaApp')
 
 @app.route('/auth')
 def auth():

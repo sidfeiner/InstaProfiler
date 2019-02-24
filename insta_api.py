@@ -3,7 +3,7 @@ import requests
 from conf import constants
 from conf.flask import Media, User, Location, Token
 from typing import List
-from common.LoggerManager import logger
+from common.LoggerManager import LoggerManager
 
 __author__ = 'Sidney'
 
@@ -17,6 +17,8 @@ API_URL = "https://api.instagram.com"
 VERSION = "v1"
 USERS_ENDPOINT = "users"
 USER_RECENT_MEDIA = "users/self/media/recent"
+
+logger = LoggerManager.get_logger('insta_api')
 
 def get_access_token(redirect_url: str, code: str) -> Token:
     """
