@@ -1,9 +1,9 @@
 #-*- encoding: utf-8 -*-
 import requests
-from conf import constants
-from conf.flask import Media, User, Location, Token
+from InstaProfiler.conf import constants
+from InstaProfiler.conf.flask import Media, User, Location, Token
 from typing import List
-from common.LoggerManager import LoggerManager
+from InstaProfiler.common.LoggerManager import LoggerManager
 
 __author__ = 'Sidney'
 

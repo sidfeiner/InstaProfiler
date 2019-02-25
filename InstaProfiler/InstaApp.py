@@ -1,9 +1,9 @@
 #-*- encoding: utf-8 -*-
 from flask import request, jsonify
-from conf import constants
-from conf.flask import app
-import insta_api
-from common.LoggerManager import LoggerManager
+from InstaProfiler.conf import constants
+from InstaProfiler.conf.flask import app
+from InstaProfiler import insta_api
+from InstaProfiler.common.LoggerManager import LoggerManager
 
 __author__ = 'Sidney'
 

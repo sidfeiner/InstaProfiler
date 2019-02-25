@@ -3,19 +3,13 @@ from datetime import datetime
 from typing import Dict
 
 import fire
-import requests
 
-from common import MySQL
-from common.MySQL import Insertable, InsertableDuplicate, MySQLHelper
-from scrapers.InstagramScraper import InstagramScraper
+from InstaProfiler.common.MySQL import Insertable, InsertableDuplicate, MySQLHelper
 import json
 from typing import List, Optional, Set
-from selenium.webdriver import Chrome
-import pandas as pd
-from selenium.webdriver.remote.webdriver import WebDriver
 
-from common.base import Serializable, InstaUser
-from scrapers.InstagramScraper import InstagramScraper, QueryHashes
+from InstaProfiler.common.base import Serializable, InstaUser
+from InstaProfiler.scrapers.InstagramScraper import InstagramScraper, QueryHashes
 
 
 class RankedUser(InstaUser):

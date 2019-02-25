@@ -1,6 +1,6 @@
 #-*- encoding: utf-8 -*-
 __author__ = 'Sidney'
-from conf.flask import Token
+from InstaProfiler.conf.flask import Token
 
 
 def save_token(token: Token) -> bool:

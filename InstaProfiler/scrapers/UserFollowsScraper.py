@@ -4,8 +4,8 @@ from selenium.webdriver import Chrome
 import pandas as pd
 from selenium.webdriver.remote.webdriver import WebDriver
 
-from common.base import Serializable, InstaUser
-from scrapers.InstagramScraper import InstagramScraper, QueryHashes
+from InstaProfiler.common.base import Serializable, InstaUser
+from InstaProfiler.scrapers.InstagramScraper import InstagramScraper, QueryHashes
 
 
 class UserFollows(Serializable):

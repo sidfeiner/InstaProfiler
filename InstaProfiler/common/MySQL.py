@@ -1,8 +1,8 @@
 from typing import List
 import pyodbc
-from pyodbc import Connection, Cursor, Row
+from pyodbc import Connection, Cursor
 
-from common.LoggerManager import LoggerManager
+from InstaProfiler.common.LoggerManager import LoggerManager
 
 
 class Insertable(object):

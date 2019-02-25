@@ -2,8 +2,8 @@ from time import sleep
 import json
 from selenium.webdriver import Chrome, ChromeOptions
 from selenium.webdriver.remote.webdriver import WebDriver
-from common.LoggerManager import LoggerManager
-from common.base import InstaUser
+from InstaProfiler.common.LoggerManager import LoggerManager
+from InstaProfiler.common.base import InstaUser
 
 CHROME_DRIVER_PATH = '/home/sid/personal/Projects/EMIReports/configs/lin/chromedriver'
 LOGIN_BTN_XPATH = '//button[contains(text(), "Log in")]'

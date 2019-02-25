@@ -1,7 +1,7 @@
 #-*-encoding: utf-8 -*-
 from flask import Flask
 from flask_mongoengine import MongoEngine
-from conf import constants
+from InstaProfiler.conf import constants
 from json import dumps
 from datetime import datetime
 
