@@ -1,0 +1,6 @@
+setup.py
+insta_profiler.egg-info/PKG-INFO
+insta_profiler.egg-info/SOURCES.txt
+insta_profiler.egg-info/dependency_links.txt
+insta_profiler.egg-info/requires.txt
+insta_profiler.egg-info/top_level.txt

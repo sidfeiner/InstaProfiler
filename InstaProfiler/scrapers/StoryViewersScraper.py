@@ -174,12 +174,11 @@ class StoryViewersAudit(object):
     VIEWERS_TABLE = "story_scrapes"
     STORIES_TABLE = "stories"
 
-    VIEWERS_UPDATE_SQL = ""
-
     @classmethod
     def save_results(self, scrape_result: StoryScraping, mysql_helper: MySQLHelper):
         story_records = []
         viewer_records = []
+        cursor = mysql_helper.get_cursor()
         for story in scrape_result.stories:
             story_record = StoryRecord(story.story_id, story.display_url,
                                        datetime.fromtimestamp(story.taken_at_timestamp),
@@ -191,8 +190,8 @@ class StoryViewersAudit(object):
                                         viewer.user_id, viewer.username, viewer.rank)
                 viewer_records.append(v_record)
 
-        story_cnt = mysql_helper.insert_ignore(self.STORIES_TABLE, story_records)
-        viewer_cnt = mysql_helper.insert_on_duplicate_update(self.VIEWERS_TABLE, viewer_records)
+        story_cnt = mysql_helper.insert_ignore(self.STORIES_TABLE, story_records, cursor)
+        viewer_cnt = mysql_helper.insert_on_duplicate_update(self.VIEWERS_TABLE, viewer_records, cursor)
         return story_cnt, viewer_cnt
 
     @classmethod

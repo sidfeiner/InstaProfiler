@@ -11,7 +11,8 @@ LOGIN_USER_INPUT_XPATH = '//input[@id="email"]'
 LOGIN_PWD_INPUT_XPATH = '//input[@id="pass"]'
 LOGIN_SUBMIT_INPUT_XPATH = '//button[@id="loginbutton"]'
 
-DEFAULT_USERNAME = 'sidfeiner@gmail.com'
+DEFAULT_MAIL = 'sidfeiner@gmail.com'
+DEFAULT_USER_NAME = 'sidfeiner'
 DEFAULT_PWD = 'Qraaynem802'
 
 
@@ -72,4 +73,4 @@ class InstagramScraper(object):
             opts = ChromeOptions()
             opts.add_argument('headless')
             cls.driver = Chrome(executable_path=CHROME_DRIVER_PATH, chrome_options=opts)
-            cls.login(cls.driver, DEFAULT_USERNAME, DEFAULT_PWD)
+            cls.login(cls.driver, DEFAULT_MAIL, DEFAULT_PWD)

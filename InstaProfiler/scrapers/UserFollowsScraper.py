@@ -1,11 +1,18 @@
 import json
-from typing import List, Optional, Set
+import uuid
+from datetime import datetime
+from typing import List, Optional, Set, Dict
+
+import fire
+from pyodbc import Cursor
 from selenium.webdriver import Chrome
 import pandas as pd
 from selenium.webdriver.remote.webdriver import WebDriver
 
+from InstaProfiler.common.LoggerManager import LoggerManager
+from InstaProfiler.common.MySQL import MySQLHelper, InsertableDuplicate, Updatable
 from InstaProfiler.common.base import Serializable, InstaUser
-from InstaProfiler.scrapers.InstagramScraper import InstagramScraper, QueryHashes
+from InstaProfiler.scrapers.InstagramScraper import InstagramScraper, QueryHashes, DEFAULT_USER_NAME
 
 
 class UserFollows(Serializable):
@@ -37,9 +44,14 @@ class UserFollows(Serializable):
         return UserFollows(user, followers, follows)
 
 
+class FollowScrape(object):
+    def __init__(self, follows: List[UserFollows], scrape_id: str, scrape_ts: datetime):
+        self.follows = follows
+        self.scrape_id = scrape_id
+        self.scrape_ts = scrape_ts
+
+
 class UserFollowsScraper(InstagramScraper):
-
-
 
     @classmethod
     def create_url(cls, query_hash: str, user_id: str, end_cursor: Optional[str] = None, batch_size: int = 300):
@@ -99,51 +111,180 @@ class UserFollowsScraper(InstagramScraper):
         cls.logger.info('parsing following')
         return cls.scrape_follow_type(driver, user_name, QueryHashes.FOLLOWING)
 
-
-
     @classmethod
-    def parse_user_follows(cls, *user_names: str):
+    def parse_user_follows(cls, *user_names: str) -> FollowScrape:
         cls.init_driver()
+        scrape_id = str(uuid.uuid4())
+        scrape_ts = datetime.now()
         users_follows = []
         for user_name in user_names:
             user = cls.scrape_user(cls.driver, user_name)
             followers = cls.parse_followers(cls.driver, user_name)
             following = cls.parse_following(cls.driver, user_name)
             users_follows.append(UserFollows(user, followers, following))
-        return users_follows
+        return FollowScrape(users_follows, scrape_id, scrape_ts)
 
 
-def analyze_follows(users_follows: List[UserFollows], first_results: int = 100):
-    all_data = []
-    user_id_to_user = {}
-    for user in users_follows:
-        all_follows = user.follows.union(user.followers)
-        for f in all_follows:
-            user_id_to_user[f.user_id] = f
-        user_data = [{'src_id': user.user.user_id, 'src_full_name': user.user.full_name, 'dst_id': f.user_id,
-                      'dst_full_name': f.full_name, 'src_follows': f in user.follows,
-                      'dst_follows': f in user.followers} for f in all_follows]
-        all_data.extend(user_data)
-    df = pd.DataFrame(all_data)
-    only_friends = df[(df['src_follows'] == True) & (df['dst_follows'] == True)]
-    analyzed = only_friends.groupby('dst_id').agg(
-        {'src_id': 'count', 'src_full_name': lambda x: ','.join(x)}).sort_values(by='src_id', ascending=False)
-    final_results = []
-    for record in analyzed[:first_results].to_records():
-        user_id, count, follows = record
-        final_results.append((user_id_to_user[user_id], count, follows))
-    return final_results
+class FollowRecord(InsertableDuplicate):
+    def __init__(self, src_user_id: str, src_user_name: str, dst_user_id: str, dst_user_name: str,
+                 src_follows: bool, src_follows_first_timestamp: datetime, src_follows_latest_timestamp: datetime,
+                 dst_follows: bool, dst_follows_first_timestamp: datetime, dst_follows_latest_timestamp: datetime,
+                 dst_unfollows_latest_timestamp: Optional[datetime] = None):
+        self.src_user_id = src_user_id
+        self.src_user_name = src_user_name
+        self.dst_user_id = dst_user_id
+        self.dst_user_name = dst_user_name
+        self.src_follows = int(src_follows)
+        self.src_follows_first_timestamp = src_follows_first_timestamp
+        self.src_follows_latest_timestamp = src_follows_latest_timestamp
+        self.dst_follows = int(dst_follows)
+        self.dst_follows_first_timestamp = dst_follows_first_timestamp
+        self.dst_follows_latest_timestamp = dst_follows_latest_timestamp
+        self.dst_unfollows_latest_timestamp = dst_unfollows_latest_timestamp
+
+    @classmethod
+    def export_order(cls) -> List[str]:
+        return ['src_user_id', 'src_user_name', 'dst_user_id', 'dst_user_name', 'src_follows',
+                'src_follows_first_timestamp', 'src_follows_latest_timestamp',
+                'dst_follows', 'dst_follows_first_timestamp', 'dst_follows_latest_timestamp']
+
+    def on_duplicate_update_sql(self) -> (str, list):
+        # For last part, it assumes we already updated the dst_unfollows_latest_timestamp field.
+        # If it's value is the same as the scrape_ts, we mustn't update dst_follows_latest_timestamp
+        # Otherwise, we do
+        return "src_follows = ?, src_follows_latest_timestamp = ?, dst_follows = ?, " \
+               "dst_follows_latest_timestamp = case when ? is null then ? else dst_follows_latest_timestamp end, " \
+               "dst_unfollows_latest_timestamp = ifnull(?, dst_unfollows_latest_timestamp)"
+
+    def on_duplicate_update_params(self) -> List:
+        return [self.src_follows, self.src_follows_latest_timestamp, self.dst_follows,
+                self.dst_unfollows_latest_timestamp, self.dst_follows_latest_timestamp,
+                self.dst_unfollows_latest_timestamp]
 
 
-def main():
-    # with open('/home/sid/Desktop/uf.json') as fp:
-    #     users_follows_dict = json.load(fp)
-    # users_follows = [UserFollows.from_dict(x) for x in users_follows_dict]
-    users_follows = UserFollowsScraper.parse_user_follows('ori_barkan1', 'rayabarkan', 'roy_barkan')
-    top_follows = analyze_follows(users_follows, 50)
-    for record in top_follows:
-        print(record)
+class UpdateUnfollow(Updatable):
+    def __init__(self, src_user_id: str, dst_user_id: str, dst_unfollows_latest_timestamp: datetime):
+        self.src_user_id = src_user_id
+        self.dst_user_id = dst_user_id
+        self.dst_unfollows_latest_timestamp = dst_unfollows_latest_timestamp
+
+    @classmethod
+    def update_key(cls) -> List[str]:
+        return ['src_user_id', 'dst_user_id']
+
+    @classmethod
+    def update_sql(cls) -> str:
+        return "dst_unfollows_latest_timestamp = ?"
+
+    def update_params(self) -> Optional[List]:
+        return [self.dst_unfollows_latest_timestamp]
+
+
+class UserFollowsAudit(object):
+    FOLLOWS_TABLE = "follows"
+    logger = LoggerManager.get_logger(__name__)
+
+    @classmethod
+    def get_current_follows(cls, mysql: MySQLHelper, user: str, cursor: Optional[Cursor] = None) -> Optional[
+        UserFollows]:
+        res = mysql.query("select * from {0} where src_user_name = ?".format(cls.FOLLOWS_TABLE), [user], cursor)
+        followers = set()
+        follows = set()
+        if len(res) == 0:
+            return None
+        for r in res:
+            if r.dst_follows:
+                followers.add(InstaUser(r.dst_user_id, r.dst_user_name))
+            if r.src_follows:
+                follows.add(InstaUser(r.dst_user_id, r.dst_user_name))
+        return UserFollows(InstaUser(res[0].src_user_id, res[0].src_user_name, res[0].src_user_name), followers,
+                           follows)
+
+    @classmethod
+    def main(self, user: str = DEFAULT_USER_NAME):
+        scraper = UserFollowsScraper()
+        follow_scrape = scraper.parse_user_follows(user)
+        follows, scrape_id, scrape_ts = follow_scrape.follows, follow_scrape.scrape_id, follow_scrape.scrape_ts
+
+        mysql = MySQLHelper('mysql-insta')
+        cursor = mysql.get_cursor()
+        current_follows = self.get_current_follows(mysql, user)
+        analyzed, users = UserFollowsAnalyzer.analyze_follows(follows)
+
+        # Update unfollowers
+        dst_who_unfollowed = set() if current_follows is None else current_follows.followers.difference(
+            follows[0].followers)
+        if len(dst_who_unfollowed) > 0:
+            self.logger.info("Updating unfollowers (found %d)", len(dst_who_unfollowed))
+            ids = ', '.join(["'{0}'".format(dst_user.user_id) for dst_user in dst_who_unfollowed])
+            params = [scrape_ts, user]
+            sql = """
+                        UPDATE {table}
+                        SET dst_unfollows_latest_timestamp = ?, dst_follows = 0
+                        WHERE src_user_name = ? and dst_user_id in ({ids})
+                    """.format(table=self.FOLLOWS_TABLE, ids=ids)
+            mysql.execute(sql, params, cursor)
+            self.logger.info("Done updating records")
+
+        # Insert new records
+        self.logger.info("Inserting records...")
+        records = []
+        src_user = follows[0].user
+        for f in analyzed:
+            dst_user = users[f['dst_id']]
+            unfollow_ts = scrape_ts if dst_user in dst_who_unfollowed else None
+            records.append(FollowRecord(src_user.user_id, src_user.username, dst_user.user_id, dst_user.username,
+                                        f['src_follows'], scrape_ts, scrape_ts, f['dst_follows'], scrape_ts, scrape_ts,
+                                        unfollow_ts))
+
+        mysql.insert_on_duplicate_update(self.FOLLOWS_TABLE, records, cursor)
+        self.logger.info("Done inserting records.")
+
+        mysql.commit()
+        cursor.close()
+        mysql.close()
+        self.logger.info("DONE")
+
+
+class UserFollowsAnalyzer(object):
+    @classmethod
+    def analyze_follows(cls, users_follows: List[UserFollows]) -> (List[dict], Dict[str, InstaUser]):
+        all_data = []
+        user_id_to_user = {}
+        for user in users_follows:
+            all_follows = user.follows.union(user.followers)
+            for f in all_follows:
+                user_id_to_user[f.user_id] = f
+            user_data = [{'src_id': user.user.user_id, 'src_full_name': user.user.full_name, 'dst_id': f.user_id,
+                          'dst_full_name': f.full_name, 'src_follows': f in user.follows,
+                          'dst_follows': f in user.followers} for f in all_follows]
+            all_data.extend(user_data)
+        return all_data, user_id_to_user
+
+    @classmethod
+    def rank_mutual_follows(cls, users_follows: List[UserFollows], first_results: Optional[int] = None):
+        all_data, user_id_to_user = cls.analyze_follows(users_follows)
+        df = pd.DataFrame(all_data)
+        only_friends = df[(df['src_follows'] == True) & (df['dst_follows'] == True)]
+        analyzed = only_friends.groupby('dst_id').agg(
+            {'src_id': 'count', 'src_full_name': lambda x: ','.join(x)}).sort_values(by='src_id', ascending=False)
+        final_results = []
+        limit_results = first_results or len(analyzed)
+        for record in analyzed[:limit_results].to_records():
+            user_id, count, follows = record
+            final_results.append((user_id_to_user[user_id], count, follows))
+        return final_results
+
+    @classmethod
+    def main(cls, user: str):
+        # with open('/home/sid/Desktop/uf.json') as fp:
+        #     users_follows_dict = json.load(fp)
+        # users_follows = [UserFollows.from_dict(x) for x in users_follows_dict]
+        users_follows = UserFollowsScraper.parse_user_follows(user)
+        top_follows = cls.analyze_follows(users_follows.follows)
+        for record in top_follows:
+            print(record)
 
 
 if __name__ == '__main__':
-    main()
+    fire.Fire(UserFollowsAudit.main)
