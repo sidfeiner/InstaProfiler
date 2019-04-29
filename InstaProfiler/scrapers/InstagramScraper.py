@@ -1,11 +1,14 @@
+import logging
 from time import sleep
 import json
+from typing import Optional, Union
+
 from selenium.webdriver import Chrome, ChromeOptions
 from selenium.webdriver.remote.webdriver import WebDriver
 from InstaProfiler.common.LoggerManager import LoggerManager
 from InstaProfiler.common.base import InstaUser
 
-CHROME_DRIVER_PATH = '/home/sid/personal/Projects/EMIReports/configs/lin/chromedriver'
+CHROME_DRIVER_PATH = '/home/sid/miniconda3/bin/chromedriver'
 LOGIN_BTN_XPATH = '//button[contains(text(), "Log in")]'
 LOGIN_USER_INPUT_XPATH = '//input[@id="email"]'
 LOGIN_PWD_INPUT_XPATH = '//input[@id="pass"]'
@@ -24,8 +27,11 @@ class QueryHashes:
 
 
 class InstagramScraper(object):
-    driver = None  # type: WebDriver
-    logger = LoggerManager.get_logger(__name__)
+    def __init__(self, log_path: Optional[str], log_level: Union[str, int] = logging.DEBUG,
+                 log_to_console: bool = True):
+        LoggerManager.init(log_path, level=log_level, with_console=log_to_console)
+        self.logger = LoggerManager.get_logger(__name__)
+        self.driver = None  # type: WebDriver
 
     INSTA_URL = "https://www.instagram.com"
     GRAPH_URL = "{0}/graphql/query".format(INSTA_URL)
@@ -36,41 +42,36 @@ class InstagramScraper(object):
         user_id = driver.execute_script('return window._sharedData.entry_data.ProfilePage[0].graphql.user.id')
         return user_id
 
-    @classmethod
-    def parse_current_user_id(cls) -> str:
+    def parse_current_user_id(self) -> str:
         """Parse currently logged on user id"""
-        user_id = cls.driver.execute_script('return window._sharedData.config.viewer.id')
+        user_id = self.driver.execute_script('return window._sharedData.config.viewer.id')
         return user_id
 
-    @classmethod
-    def login(cls, driver: WebDriver, user: str, password: str):
-        cls.logger.info("Logging in...")
-        cls.to_home_page()
+    def login(self, user: str, password: str):
+        self.logger.info("Logging in...")
+        self.to_home_page()
         sleep(2)
-        driver.find_element_by_xpath(LOGIN_BTN_XPATH).click()
-        driver.find_element_by_xpath(LOGIN_USER_INPUT_XPATH).send_keys(user)
-        driver.find_element_by_xpath(LOGIN_PWD_INPUT_XPATH).send_keys(password)
-        driver.find_element_by_xpath(LOGIN_SUBMIT_INPUT_XPATH).click()
-        cls.logger.info('done logging in. waiting 3 seconds...')
+        self.driver.find_element_by_xpath(LOGIN_BTN_XPATH).click()
+        self.driver.find_element_by_xpath(LOGIN_USER_INPUT_XPATH).send_keys(user)
+        self.driver.find_element_by_xpath(LOGIN_PWD_INPUT_XPATH).send_keys(password)
+        self.driver.find_element_by_xpath(LOGIN_SUBMIT_INPUT_XPATH).click()
+        self.logger.info('done logging in. waiting 3 seconds...')
         sleep(3)
 
-    @classmethod
-    def to_home_page(cls):
-        cls.driver.get(cls.INSTA_URL)
+    def to_home_page(self):
+        self.driver.get(self.INSTA_URL)
         sleep(1)
 
-    @classmethod
     def scrape_user(cls, driver: WebDriver, user_name: str):
         cls.logger.info('Scraping user data for %s', user_name)
         driver.get('{0}/{1}/?__a=1'.format(cls.INSTA_URL, user_name))
         user_data = json.loads(driver.find_element_by_tag_name('body').text)['graphql']['user']
         return InstaUser.from_dict(user_data)
 
-    @classmethod
-    def init_driver(cls):
-        if cls.driver is None:
-            cls.logger.info('Initing driver...')
+    def init_driver(self):
+        if self.driver is None:
+            self.logger.info('Initing driver...')
             opts = ChromeOptions()
             opts.add_argument('headless')
-            cls.driver = Chrome(executable_path=CHROME_DRIVER_PATH, chrome_options=opts)
-            cls.login(cls.driver, DEFAULT_MAIL, DEFAULT_PWD)
+            self.driver = Chrome(executable_path=CHROME_DRIVER_PATH, chrome_options=opts)
+            self.login(DEFAULT_MAIL, DEFAULT_PWD)

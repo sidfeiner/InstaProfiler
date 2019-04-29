@@ -1,7 +1,8 @@
 import json
+import logging
 import uuid
 from datetime import datetime
-from typing import List, Optional, Set, Dict
+from typing import List, Optional, Set, Dict, Union
 
 import fire
 from pyodbc import Cursor
@@ -14,6 +15,7 @@ from InstaProfiler.common.MySQL import MySQLHelper, InsertableDuplicate, Updatab
 from InstaProfiler.common.base import Serializable, InstaUser
 from InstaProfiler.scrapers.InstagramScraper import InstagramScraper, QueryHashes, DEFAULT_USER_NAME
 
+LOG_PATH = "/home/sid/personal/Projects/InstaProfiler/logs/follows.log"
 
 class UserFollows(Serializable):
     def __init__(self, user: InstaUser, followers: Set[InstaUser], follows: Set[InstaUser]):
@@ -53,6 +55,11 @@ class FollowScrape(object):
 
 class UserFollowsScraper(InstagramScraper):
 
+    def __init__(self, log_path: Optional[str] = None, log_level: Union[str, int] = logging.DEBUG,
+                 log_to_console: bool = True):
+        super().__init__(log_path, log_level, log_to_console)
+        self.logger = LoggerManager.get_logger(__name__)
+
     @classmethod
     def create_url(cls, query_hash: str, user_id: str, end_cursor: Optional[str] = None, batch_size: int = 300):
         vars = {"id": user_id, "first": batch_size, "include_reel": False, "fetch_mutual": False}
@@ -61,30 +68,28 @@ class UserFollowsScraper(InstagramScraper):
         vars_str = json.dumps(vars)
         return "{url}?query_hash={hash}&variables={vars}".format(url=cls.GRAPH_URL, hash=query_hash, vars=vars_str)
 
-    @classmethod
-    def scrape_follow_type(cls, driver: WebDriver, user_name: str, query_hash: str) -> Set[InstaUser]:
-        cls.init_driver()
-        cls.logger.info('Scraping follow type')
+    def scrape_follow_type(self, driver: WebDriver, user_name: str, query_hash: str) -> Set[InstaUser]:
+        self.init_driver()
+        self.logger.info('Scraping follow type')
         driver.get("http://www.instagram.com/{0}".format(user_name))
         data_key = 'edge_followed_by' if query_hash == QueryHashes.FOLLOWERS else 'edge_follow'
-        user_id = cls.parse_user_id_from_profile(driver)
-        request_url = cls.create_url(query_hash, user_id)
+        user_id = self.parse_user_id_from_profile(driver)
+        request_url = self.create_url(query_hash, user_id)
         all_users = set()  # type: Set[InstaUser]
         while True:
             driver.get(request_url)
             data = json.loads(driver.find_element_by_tag_name('body').text)['data']['user'][data_key]
             end_cursor = data['page_info']['end_cursor'] if data['page_info']['has_next_page'] else None
             users = {InstaUser.from_dict(user['node']) for user in data['edges']}
-            cls.logger.info('Currently scraped %d users', len(users))
+            self.logger.info('Currently scraped %d users', len(users))
             all_users.update(users)
             if end_cursor is None:
                 break
-            request_url = cls.create_url(query_hash, user_id, end_cursor)
-        cls.logger.info('Done scraping users. found %d users', len(all_users))
+            request_url = self.create_url(query_hash, user_id, end_cursor)
+        self.logger.info('Done scraping users. found %d users', len(all_users))
         return all_users
 
-    @classmethod
-    def parse_followers(cls, driver: WebDriver, user_name: str) -> Set[InstaUser]:
+    def parse_followers(self, driver: WebDriver, user_name: str) -> Set[InstaUser]:
         """Return followers of given user
 
         Parameters
@@ -94,11 +99,10 @@ class UserFollowsScraper(InstagramScraper):
         user_name: str
             User to parse. Must be user name
         """
-        cls.logger.info('parsing followers')
-        return cls.scrape_follow_type(driver, user_name, QueryHashes.FOLLOWERS)
+        self.logger.info('parsing followers')
+        return self.scrape_follow_type(driver, user_name, QueryHashes.FOLLOWERS)
 
-    @classmethod
-    def parse_following(cls, driver: WebDriver, user_name: str) -> Set[InstaUser]:
+    def parse_following(self, driver: WebDriver, user_name: str) -> Set[InstaUser]:
         """Return followers of given user
 
         Parameters
@@ -108,19 +112,18 @@ class UserFollowsScraper(InstagramScraper):
         user_name: str
             User to parse. Must be user name
         """
-        cls.logger.info('parsing following')
-        return cls.scrape_follow_type(driver, user_name, QueryHashes.FOLLOWING)
+        self.logger.info('parsing following')
+        return self.scrape_follow_type(driver, user_name, QueryHashes.FOLLOWING)
 
-    @classmethod
-    def parse_user_follows(cls, *user_names: str) -> FollowScrape:
-        cls.init_driver()
+    def parse_user_follows(self, *user_names: str) -> FollowScrape:
+        self.init_driver()
         scrape_id = str(uuid.uuid4())
         scrape_ts = datetime.now()
         users_follows = []
         for user_name in user_names:
-            user = cls.scrape_user(cls.driver, user_name)
-            followers = cls.parse_followers(cls.driver, user_name)
-            following = cls.parse_following(cls.driver, user_name)
+            user = self.scrape_user(self.driver, user_name)
+            followers = self.parse_followers(self.driver, user_name)
+            following = self.parse_following(self.driver, user_name)
             users_follows.append(UserFollows(user, followers, following))
         return FollowScrape(users_follows, scrape_id, scrape_ts)
 
@@ -182,12 +185,15 @@ class UpdateUnfollow(Updatable):
 
 class UserFollowsAudit(object):
     FOLLOWS_TABLE = "follows"
-    logger = LoggerManager.get_logger(__name__)
 
-    @classmethod
-    def get_current_follows(cls, mysql: MySQLHelper, user: str, cursor: Optional[Cursor] = None) -> Optional[
+    def __init__(self, log_path: Optional[str] = None, log_level: Union[str, int] = logging.DEBUG,
+                 log_to_console: bool = True):
+        LoggerManager.init(log_path, level=log_level, with_console=log_to_console)
+        self.logger = LoggerManager.get_logger(__name__)
+
+    def get_current_follows(self, mysql: MySQLHelper, user: str, cursor: Optional[Cursor] = None) -> Optional[
         UserFollows]:
-        res = mysql.query("select * from {0} where src_user_name = ?".format(cls.FOLLOWS_TABLE), [user], cursor)
+        res = mysql.query("select * from {0} where src_user_name = ?".format(self.FOLLOWS_TABLE), [user], cursor)
         followers = set()
         follows = set()
         if len(res) == 0:
@@ -200,13 +206,12 @@ class UserFollowsAudit(object):
         return UserFollows(InstaUser(res[0].src_user_id, res[0].src_user_name, res[0].src_user_name), followers,
                            follows)
 
-    @classmethod
     def main(self, user: str = DEFAULT_USER_NAME):
         scraper = UserFollowsScraper()
         follow_scrape = scraper.parse_user_follows(user)
         follows, scrape_id, scrape_ts = follow_scrape.follows, follow_scrape.scrape_id, follow_scrape.scrape_ts
 
-        mysql = MySQLHelper('mysql-insta')
+        mysql = MySQLHelper('mysql-insta-local')
         cursor = mysql.get_cursor()
         current_follows = self.get_current_follows(mysql, user)
         analyzed, users = UserFollowsAnalyzer.analyze_follows(follows)
@@ -287,4 +292,4 @@ class UserFollowsAnalyzer(object):
 
 
 if __name__ == '__main__':
-    fire.Fire(UserFollowsAudit.main)
+    fire.Fire(UserFollowsAudit)

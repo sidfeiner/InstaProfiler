@@ -1,9 +1,11 @@
+import logging
 import uuid
 from datetime import datetime
-from typing import Dict
+from typing import Dict, Union
 
 import fire
 
+from InstaProfiler.common.LoggerManager import LoggerManager
 from InstaProfiler.common.MySQL import Insertable, InsertableDuplicate, MySQLHelper
 import json
 from typing import List, Optional, Set
@@ -75,6 +77,10 @@ class StoryScraping(object):
 
 class StoryViewersScraper(InstagramScraper):
 
+    def __init__(self, log_path: Optional[str] = None, log_level: Union[str, int] = logging.DEBUG,
+                 log_to_console: bool = True):
+        super().__init__(log_path, log_level, log_to_console)
+
     @classmethod
     def _create_request_vars(cls, user_id: str, cursor: Optional[str] = None, batch_size: int = 50):
         vars = {
@@ -93,20 +99,19 @@ class StoryViewersScraper(InstagramScraper):
         vars_str = json.dumps(vars_dict)
         return "{url}?query_hash={hash}&variables={vars}".format(url=cls.GRAPH_URL, hash=query_hash, vars=vars_str)
 
-    @classmethod
-    def scrape_viewers(cls) -> StoryScraping:
-        cls.init_driver()
+    def scrape_viewers(self) -> StoryScraping:
+        self.init_driver()
         scrape_id = str(uuid.uuid4())
         scrape_ts = datetime.now()
-        cls.logger.info('Scraping viewers (scrape id %s)', scrape_id)
-        cls.to_home_page()
-        my_user_id = cls.parse_current_user_id()
-        request_url = cls.create_url(QueryHashes.STORY_VIEWERS, my_user_id)
+        self.logger.info('Scraping viewers (scrape id %s)', scrape_id)
+        self.to_home_page()
+        my_user_id = self.parse_current_user_id()
+        request_url = self.create_url(QueryHashes.STORY_VIEWERS, my_user_id)
         all_stories = {}  # type: Dict[str, Story]
         next_cursor = 0
         while True:
-            cls.driver.get(request_url)
-            stories = json.loads(cls.driver.find_element_by_tag_name('body').text)['data']['reels_media'][0]['items']
+            self.driver.get(request_url)
+            stories = json.loads(self.driver.find_element_by_tag_name('body').text)['data']['reels_media'][0]['items']
             next_cursors = []
             for item in stories:
                 story = Story.from_dict(item)
@@ -129,7 +134,7 @@ class StoryViewersScraper(InstagramScraper):
                 # No story has more viewers
                 break
             next_cursor = next_cursors[0]  # If more than 1 exist, they will be the same
-            request_url = cls.create_url(QueryHashes.STORY_VIEWERS, my_user_id, next_cursor)
+            request_url = self.create_url(QueryHashes.STORY_VIEWERS, my_user_id, next_cursor)
 
         return StoryScraping(list(all_stories.values()), scrape_id, scrape_ts)
 
@@ -174,7 +179,11 @@ class StoryViewersAudit(object):
     VIEWERS_TABLE = "story_scrapes"
     STORIES_TABLE = "stories"
 
-    @classmethod
+    def __init__(self, log_path: Optional[str] = None, log_level: Union[str, int] = logging.DEBUG,
+                 log_to_console: bool = True):
+        LoggerManager.init(log_path, level=log_level, with_console=log_to_console)
+        self.logger = LoggerManager.get_logger(__name__)
+
     def save_results(self, scrape_result: StoryScraping, mysql_helper: MySQLHelper):
         story_records = []
         viewer_records = []
@@ -194,14 +203,14 @@ class StoryViewersAudit(object):
         viewer_cnt = mysql_helper.insert_on_duplicate_update(self.VIEWERS_TABLE, viewer_records, cursor)
         return story_cnt, viewer_cnt
 
-    @classmethod
     def main(self):
-        mysql = MySQLHelper('mysql-insta')
-        scrape_result = StoryViewersScraper.scrape_viewers()
+        mysql = MySQLHelper('mysql-insta-local')
+        scraper = StoryViewersScraper()
+        scrape_result = scraper.scrape_viewers()
         self.save_results(scrape_result, mysql)
         mysql.commit()
         mysql.close()
 
 
 if __name__ == '__main__':
-    fire.Fire(StoryViewersAudit.main)
+    fire.Fire(StoryViewersAudit)
