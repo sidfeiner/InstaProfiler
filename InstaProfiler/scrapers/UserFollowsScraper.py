@@ -17,6 +17,7 @@ from InstaProfiler.scrapers.InstagramScraper import InstagramScraper, QueryHashe
 
 LOG_PATH = "/home/sid/personal/Projects/InstaProfiler/logs/follows.log"
 
+
 class UserFollows(Serializable):
     def __init__(self, user: InstaUser, followers: Set[InstaUser], follows: Set[InstaUser]):
         self.user = user
@@ -141,8 +142,8 @@ class FollowRecord(InsertableDuplicate):
         self.src_follows_first_timestamp = src_follows_first_timestamp
         self.src_follows_latest_timestamp = src_follows_latest_timestamp
         self.dst_follows = int(dst_follows)
-        self.dst_follows_first_timestamp = dst_follows_first_timestamp
-        self.dst_follows_latest_timestamp = dst_follows_latest_timestamp
+        self.dst_follows_first_timestamp = dst_follows_first_timestamp if dst_follows == 1 else None
+        self.dst_follows_latest_timestamp = dst_follows_latest_timestamp if dst_follows == 1 else None
         self.dst_unfollows_latest_timestamp = dst_unfollows_latest_timestamp
 
     @classmethod
@@ -155,14 +156,15 @@ class FollowRecord(InsertableDuplicate):
         # For last part, it assumes we already updated the dst_unfollows_latest_timestamp field.
         # If it's value is the same as the scrape_ts, we mustn't update dst_follows_latest_timestamp
         # Otherwise, we do
-        return "src_follows = ?, src_follows_latest_timestamp = ?, dst_follows = ?, " \
-               "dst_follows_latest_timestamp = case when ? is null then ? else dst_follows_latest_timestamp end, " \
+        return "src_follows = ?, " \
+               "src_follows_latest_timestamp = ifnull(?, src_follows_latest_timestamp), " \
+               "dst_follows = ?, " \
+               "dst_follows_latest_timestamp = ifnull(?, dst_follows_latest_timestamp), " \
                "dst_unfollows_latest_timestamp = ifnull(?, dst_unfollows_latest_timestamp)"
 
     def on_duplicate_update_params(self) -> List:
         return [self.src_follows, self.src_follows_latest_timestamp, self.dst_follows,
-                self.dst_unfollows_latest_timestamp, self.dst_follows_latest_timestamp,
-                self.dst_unfollows_latest_timestamp]
+                self.dst_follows_latest_timestamp, self.dst_unfollows_latest_timestamp]
 
 
 class UpdateUnfollow(Updatable):

@@ -85,6 +85,7 @@ class MySQLHelper(object):
         data = [[getattr(record, field) for field in record.export_order()] + record.on_duplicate_update_params() for
                 record in records]
         final_cursor = cursor or self.get_cursor()
+        self.logger.debug("running sql: %s", sql)
         final_cursor.executemany(sql, data)
         if cursor is None:
             final_cursor.close()
