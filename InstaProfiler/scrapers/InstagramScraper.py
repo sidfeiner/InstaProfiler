@@ -10,9 +10,10 @@ from InstaProfiler.common.base import InstaUser
 
 CHROME_DRIVER_PATH = '/home/sid/miniconda3/bin/chromedriver'
 LOGIN_BTN_XPATH = '//button[contains(text(), "Log in")]'
-LOGIN_USER_INPUT_XPATH = '//input[@id="email"]'
-LOGIN_PWD_INPUT_XPATH = '//input[@id="pass"]'
-LOGIN_SUBMIT_INPUT_XPATH = '//button[@id="loginbutton"]'
+LOGIN_USER_INPUT_XPATH = '//div[@id="email_input_container"]/input'
+LOGIN_PWD_INPUT_XPATH = '//input[@type="password"]'
+LOGIN_SUBMIT_INPUT_XPATH = '//button[@name="login"]'
+LOGIN_AS_USER_BTN_XPATH = '//div[contains(text(), "Continue as")]'
 
 DEFAULT_MAIL = 'sidfeiner@gmail.com'
 DEFAULT_USER_NAME = 'sidfeiner'
@@ -47,6 +48,11 @@ class InstagramScraper(object):
         user_id = self.driver.execute_script('return window._sharedData.config.viewer.id')
         return user_id
 
+    def reach_login_screen(self):
+        els = self.driver.find_elements_by_xpath(LOGIN_AUTH_SWITCHER)
+        if len(els) > 0:
+            els[0].click()
+
     def login(self, user: str, password: str):
         self.logger.info("Logging in...")
         self.to_home_page()
@@ -55,6 +61,10 @@ class InstagramScraper(object):
         self.driver.find_element_by_xpath(LOGIN_USER_INPUT_XPATH).send_keys(user)
         self.driver.find_element_by_xpath(LOGIN_PWD_INPUT_XPATH).send_keys(password)
         self.driver.find_element_by_xpath(LOGIN_SUBMIT_INPUT_XPATH).click()
+        sleep(3)
+        els = self.driver.find_elements_by_xpath(LOGIN_AS_USER_BTN_XPATH)
+        if len(els) > 0:
+            els[0].click()
         self.logger.info('done logging in. waiting 3 seconds...')
         sleep(3)
 
