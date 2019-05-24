@@ -116,15 +116,20 @@ class UserFollowsScraper(InstagramScraper):
         self.logger.info('parsing following')
         return self.scrape_follow_type(driver, user_name, QueryHashes.FOLLOWING)
 
-    def parse_user_follows(self, *user_names: str) -> FollowScrape:
+    def parse_user_follows(self, user_names: List[str], only_follows: bool = False,
+                           only_followers: bool = False) -> FollowScrape:
         self.init_driver()
         scrape_id = str(uuid.uuid4())
         scrape_ts = datetime.now()
         users_follows = []
         for user_name in user_names:
+            self.logger.info("Scraping user follows for user %s", user_name)
             user = self.scrape_user(self.driver, user_name)
-            followers = self.parse_followers(self.driver, user_name)
-            following = self.parse_following(self.driver, user_name)
+            followers = following = set()
+            if not only_follows:
+                followers = self.parse_followers(self.driver, user_name)
+            if not only_followers:
+                following = self.parse_following(self.driver, user_name)
             users_follows.append(UserFollows(user, followers, following))
         return FollowScrape(users_follows, scrape_id, scrape_ts)
 
@@ -208,15 +213,22 @@ class UserFollowsAudit(object):
         return UserFollows(InstaUser(res[0].src_user_id, res[0].src_user_name, res[0].src_user_name), followers,
                            follows)
 
-    def main(self, user: str = DEFAULT_USER_NAME):
+    def main(self, user: str = DEFAULT_USER_NAME, only_mutual: bool = False, only_follows: bool = False,
+             only_followers: bool = False):
+        """
+        :param user: User to parse its follows
+        :param only_mutual: If set to True, will save only people that are both followers and follows.
+                            Useful when src has many followers. This will make sure only "relevant" people are saved
+        :return:
+        """
         scraper = UserFollowsScraper()
-        follow_scrape = scraper.parse_user_follows(user)
+        follow_scrape = scraper.parse_user_follows([user], only_follows, only_followers)
         follows, scrape_id, scrape_ts = follow_scrape.follows, follow_scrape.scrape_id, follow_scrape.scrape_ts
 
         mysql = MySQLHelper('mysql-insta-local')
         cursor = mysql.get_cursor()
         current_follows = self.get_current_follows(mysql, user)
-        analyzed, users = UserFollowsAnalyzer.analyze_follows(follows)
+        analyzed, users = UserFollowsAnalyzer.analyze_follows(follows, only_mutual)
 
         # Update unfollowers
         dst_who_unfollowed = set() if current_follows is None else current_follows.followers.difference(
@@ -255,16 +267,25 @@ class UserFollowsAudit(object):
 
 class UserFollowsAnalyzer(object):
     @classmethod
-    def analyze_follows(cls, users_follows: List[UserFollows]) -> (List[dict], Dict[str, InstaUser]):
+    def analyze_follows(cls, users_follows: List[UserFollows], only_mutuals: bool = False) -> (
+            List[dict], Dict[str, InstaUser]):
         all_data = []
         user_id_to_user = {}
         for user in users_follows:
             all_follows = user.follows.union(user.followers)
             for f in all_follows:
                 user_id_to_user[f.user_id] = f
-            user_data = [{'src_id': user.user.user_id, 'src_full_name': user.user.full_name, 'dst_id': f.user_id,
-                          'dst_full_name': f.full_name, 'src_follows': f in user.follows,
-                          'dst_follows': f in user.followers} for f in all_follows]
+
+            user_data = []
+            for f in all_follows:
+                src_follows = f in user.follows
+                dst_follows = f in user.followers
+                if only_mutuals and False in [src_follows, dst_follows]:
+                    # Do not save user if only mutuals but one doesn't follow the other
+                    continue
+                user_data = [{'src_id': user.user.user_id, 'src_full_name': user.user.full_name, 'dst_id': f.user_id,
+                              'dst_full_name': f.full_name, 'src_follows': src_follows,
+                              'dst_follows': dst_follows} for f in all_follows]
             all_data.extend(user_data)
         return all_data, user_id_to_user
 
@@ -287,7 +308,7 @@ class UserFollowsAnalyzer(object):
         # with open('/home/sid/Desktop/uf.json') as fp:
         #     users_follows_dict = json.load(fp)
         # users_follows = [UserFollows.from_dict(x) for x in users_follows_dict]
-        users_follows = UserFollowsScraper.parse_user_follows(user)
+        users_follows = UserFollowsScraper.parse_user_follows([user])
         top_follows = cls.analyze_follows(users_follows.follows)
         for record in top_follows:
             print(record)

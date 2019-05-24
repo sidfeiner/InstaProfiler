@@ -36,9 +36,12 @@ class RankedUser(InstaUser):
 
 
 class Story(Serializable):
-    def __init__(self, story_id: str, display_url: str, taken_at_timestamp: int, expiring_at_timestamp: int,
+    def __init__(self, story_id: str, story_owner_id: str, story_owner_user_name: str, display_url: str,
+                 taken_at_timestamp: int, expiring_at_timestamp: int,
                  story_view_count: int, is_video: bool, viewers: Optional[Set[RankedUser]] = None, *args, **kwargs):
         self.story_id = story_id
+        self.story_owner_id = story_owner_id
+        self.story_owner_user_name = story_owner_user_name
         self.display_url = display_url
         self.taken_at_timestamp = taken_at_timestamp
         self.expiring_at_timestamp = expiring_at_timestamp
@@ -105,15 +108,16 @@ class StoryViewersScraper(InstagramScraper):
         scrape_ts = datetime.now()
         self.logger.info('Scraping viewers (scrape id %s)', scrape_id)
         self.to_home_page()
-        my_user_id = self.parse_current_user_id()
+        my_user_id, my_user_name = self.parse_current_user_info()
         request_url = self.create_url(QueryHashes.STORY_VIEWERS, my_user_id)
         all_stories = {}  # type: Dict[str, Story]
-        next_cursor = 0
         while True:
             self.driver.get(request_url)
             stories = json.loads(self.driver.find_element_by_tag_name('body').text)['data']['reels_media'][0]['items']
             next_cursors = []
             for item in stories:
+                item['story_owner_id'] = my_user_id
+                item['story_owner_user_name'] = my_user_name
                 story = Story.from_dict(item)
                 if story.story_id not in all_stories:
                     all_stories[story.story_id] = story
@@ -140,24 +144,31 @@ class StoryViewersScraper(InstagramScraper):
 
 
 class StoryRecord(Insertable):
-    def __init__(self, story_id: str, display_url: str, taken_at_timestamp: datetime, expiring_at_timestamp: datetime):
+    def __init__(self, story_id: str, story_owner_id: str, story_owner_user_name: str, display_url: str,
+                 taken_at_timestamp: datetime, expiring_at_timestamp: datetime):
         self.story_id = story_id
+        self.story_owner_id = story_owner_id
+        self.story_owner_user_name = story_owner_user_name
         self.display_url = display_url
         self.taken_at_timestamp = taken_at_timestamp
         self.expiring_at_timestamp = expiring_at_timestamp
 
     @classmethod
     def export_order(cls) -> List[str]:
-        return ['story_id', 'display_url', 'taken_at_timestamp', 'expiring_at_timestamp']
+        return ['story_id', 'display_url', 'taken_at_timestamp', 'expiring_at_timestamp', 'story_owner_id',
+                'story_owner_user_name']
 
 
 class ViewerRecord(InsertableDuplicate):
-    def __init__(self, scrape_id: str, scrape_ts: datetime, story_id: str, view_count: int, user_id: int,
+    def __init__(self, scrape_id: str, scrape_ts: datetime, story_id: str, story_owner_id: str,
+                 story_owner_user_name: str, view_count: int, user_id: int,
                  user_name: str, rank: int):
         self.scrape_id = scrape_id
         self.scrape_ts = scrape_ts
         self.first_seen_ts = scrape_ts
         self.story_id = story_id
+        self.story_owner_id = story_owner_id
+        self.story_owner_user_name = story_owner_user_name
         self.view_count = view_count
         self.user_id = user_id
         self.user_name = user_name
@@ -166,7 +177,7 @@ class ViewerRecord(InsertableDuplicate):
     @classmethod
     def export_order(cls) -> List[str]:
         return ['scrape_id', 'scrape_ts', 'first_seen_ts', 'story_id', 'view_count', 'user_id', 'user_name',
-                'view_rank']
+                'view_rank', 'story_owner_id', 'story_owner_user_name']
 
     def on_duplicate_update_sql(self) -> (str, list):
         return "view_count = ?, scrape_id = ?, scrape_ts = ?, view_rank = ?"
@@ -189,13 +200,13 @@ class StoryViewersAudit(object):
         viewer_records = []
         cursor = mysql_helper.get_cursor()
         for story in scrape_result.stories:
-            story_record = StoryRecord(story.story_id, story.display_url,
-                                       datetime.fromtimestamp(story.taken_at_timestamp),
+            story_record = StoryRecord(story.story_id, story.story_owner_id, story.story_owner_user_name,
+                                       story.display_url, datetime.fromtimestamp(story.taken_at_timestamp),
                                        datetime.fromtimestamp(story.expiring_at_timestamp))
             story_records.append(story_record)
             for viewer in story.viewers:
                 v_record = ViewerRecord(scrape_result.scrape_id, scrape_result.scrape_ts, story.story_id,
-                                        story.story_view_count,
+                                        story.story_owner_id, story.story_owner_user_name, story.story_view_count,
                                         viewer.user_id, viewer.username, viewer.rank)
                 viewer_records.append(v_record)
 

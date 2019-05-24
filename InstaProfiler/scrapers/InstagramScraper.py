@@ -43,15 +43,11 @@ class InstagramScraper(object):
         user_id = driver.execute_script('return window._sharedData.entry_data.ProfilePage[0].graphql.user.id')
         return user_id
 
-    def parse_current_user_id(self) -> str:
-        """Parse currently logged on user id"""
+    def parse_current_user_info(self) -> (str, str):
+        """Parse currently logged on user id and username"""
         user_id = self.driver.execute_script('return window._sharedData.config.viewer.id')
-        return user_id
-
-    def reach_login_screen(self):
-        els = self.driver.find_elements_by_xpath(LOGIN_AUTH_SWITCHER)
-        if len(els) > 0:
-            els[0].click()
+        user_name = self.driver.execute_script('return window._sharedData.config.viewer.username')
+        return user_id, user_name
 
     def login(self, user: str, password: str):
         self.logger.info("Logging in...")
