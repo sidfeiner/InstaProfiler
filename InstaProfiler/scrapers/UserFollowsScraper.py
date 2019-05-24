@@ -283,9 +283,10 @@ class UserFollowsAnalyzer(object):
                 if only_mutuals and False in [src_follows, dst_follows]:
                     # Do not save user if only mutuals but one doesn't follow the other
                     continue
-                user_data = [{'src_id': user.user.user_id, 'src_full_name': user.user.full_name, 'dst_id': f.user_id,
-                              'dst_full_name': f.full_name, 'src_follows': src_follows,
-                              'dst_follows': dst_follows} for f in all_follows]
+                user_data.append(
+                    {'src_id': user.user.user_id, 'src_full_name': user.user.full_name, 'dst_id': f.user_id,
+                     'dst_full_name': f.full_name, 'src_follows': src_follows,
+                     'dst_follows': dst_follows})
             all_data.extend(user_data)
         return all_data, user_id_to_user
 
