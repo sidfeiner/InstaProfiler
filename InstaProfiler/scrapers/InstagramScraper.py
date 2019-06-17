@@ -17,7 +17,7 @@ LOGIN_AS_USER_BTN_XPATH = '//div[contains(text(), "Continue as")]'
 
 DEFAULT_MAIL = 'sidfeiner@gmail.com'
 DEFAULT_USER_NAME = 'sidfeiner'
-DEFAULT_PWD = 'Qraaynem802'
+DEFAULT_PWD = 'SidAtFB803'
 
 
 class QueryHashes:
