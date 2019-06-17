@@ -74,7 +74,7 @@ class Serializable(object):
 
 
 class InstaUser(Serializable):
-    def __init__(self, user_id: str, username: str, full_name: Optional[str] = None,
+    def __init__(self, user_id: int, username: str, full_name: Optional[str] = None,
                  profile_pic_url: Optional[str] = None, is_private: Optional[bool] = None,
                  is_verified: Optional[bool] = None, followed_by_viewer: Optional[bool] = None, *args, **kwargs):
         self.user_id = user_id
@@ -99,5 +99,5 @@ class InstaUser(Serializable):
     @classmethod
     def from_dict(cls, attr_dict: dict) -> 'InstaUser':
         if 'user_id' not in attr_dict:
-            attr_dict['user_id'] = attr_dict['id']
+            attr_dict['user_id'] = int(attr_dict['id'])
         return super().from_dict(attr_dict)
