@@ -1,8 +1,9 @@
 import logging
+import os
 from time import sleep
 import json
 from typing import Optional, Union
-
+import pickle
 from selenium.webdriver import Chrome, ChromeOptions
 from selenium.webdriver.remote.webdriver import WebDriver
 from InstaProfiler.common.LoggerManager import LoggerManager
@@ -18,6 +19,7 @@ LOGIN_AS_USER_BTN_XPATH = '//div[contains(text(), "Continue as")]'
 DEFAULT_MAIL = 'sidfeiner@gmail.com'
 DEFAULT_USER_NAME = 'sidfeiner'
 DEFAULT_PWD = 'SidAtFB803'
+DEFAULT_COOKIES_PKL_FILE = '/home/sid/personal/Projects/InstaProfiler/InstaProfiler/cookies.pkl'
 
 
 class QueryHashes:
@@ -49,7 +51,44 @@ class InstagramScraper(object):
         user_name = self.driver.execute_script('return window._sharedData.config.viewer.username')
         return user_id, user_name
 
-    def login(self, user: str, password: str):
+    def _is_logged_in(self) -> bool:
+        """Returns if a user is logged in"""
+        return ' logged-in' in self.driver.find_element_by_xpath('html').get_attribute('class')
+
+    def _save_cookies(self, cookies_pkl_path: str):
+        """Save cookies to pkl files"""
+        self.logger.info("Saving cookies to pkl file")
+        cookies = self.driver.get_cookies()
+        with open(cookies_pkl_path, 'wb') as fp:
+            pickle.dump(cookies, fp)
+
+    def login(self, user: Optional[str], password: Optional[str], cookies_pkl_path: Optional[str]) -> bool:
+        """Logs in. first tries with cookies and then with basic auth"""
+        logged_in = False
+        if cookies_pkl_path is not None and os.path.exists(cookies_pkl_path):
+            logged_in = self.login_with_cookies(cookies_pkl_path)
+        if user is not None and password is not None and not logged_in:
+            logged_in = self.login_with_auth(user, password)
+            if logged_in and cookies_pkl_path:
+                self._save_cookies(cookies_pkl_path)
+        return logged_in
+
+    def login_with_cookies(self, cookies_pkl_path: str) -> bool:
+        self.logger.info("Logging in with cookies pickle file")
+
+        self.logger.info("Navigating to domain other than instagram...")
+        self.driver.get('http://www.google.com')
+
+        with open(cookies_pkl_path, 'rb') as fp:
+            cookies = pickle.load(fp)
+        for cookie in cookies:
+            self.driver.add_cookie(cookie)
+
+        self.logger.info("Returning to original url")
+        self.to_home_page()
+        return self._is_logged_in()
+
+    def login_with_auth(self, user: str, password: str):
         self.logger.info("Logging in...")
         self.to_home_page()
         sleep(2)
@@ -61,8 +100,13 @@ class InstagramScraper(object):
         els = self.driver.find_elements_by_xpath(LOGIN_AS_USER_BTN_XPATH)
         if len(els) > 0:
             els[0].click()
-        self.logger.info('done logging in. waiting 3 seconds...')
         sleep(3)
+        if self._is_logged_in():
+            self.logger.info('done logging in. waiting 3 seconds...')
+            return True
+        else:
+            self.logger.warn('Failed logging with username and pwd')
+            return False
 
     def to_home_page(self):
         self.driver.get(self.INSTA_URL)
@@ -80,4 +124,4 @@ class InstagramScraper(object):
             opts = ChromeOptions()
             opts.add_argument('headless')
             self.driver = Chrome(executable_path=CHROME_DRIVER_PATH, chrome_options=opts)
-            self.login(DEFAULT_MAIL, DEFAULT_PWD)
+            self.login(DEFAULT_MAIL, DEFAULT_PWD, DEFAULT_COOKIES_PKL_FILE)
