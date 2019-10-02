@@ -27,6 +27,8 @@ class QueryHashes:
     FOLLOWERS = "56066f031e6239f35a904ac20c9f37d9"
     FOLLOWING = "c56ee0ae1f89cdbd1c89e2bc6b8f3d18"
     STORY_VIEWERS = 'de8017ee0a7c9c45ec4260733d81ea31'
+    MEDIA = "f2405b236d85e8296cf30347c9f08c2a"
+    MEDIA_LIKES = "d5d763b1e2acf209d62d22d184488e57"
 
 
 class InstagramScraper(object):
@@ -82,6 +84,8 @@ class InstagramScraper(object):
         with open(cookies_pkl_path, 'rb') as fp:
             cookies = pickle.load(fp)
         for cookie in cookies:
+            if 'expiry' in cookie:
+                cookie.pop('expiry')
             self.driver.add_cookie(cookie)
 
         self.logger.info("Returning to original url")

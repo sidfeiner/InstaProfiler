@@ -5,7 +5,7 @@ from typing import Optional
 
 
 class Serializable(object):
-    vertica_format = "%Y-%m-%d %H:%M:%S"
+    date_time_fmt = "%Y-%m-%d %H:%M:%S"
 
     def to_json(self, remove_nulls: bool = False, stringify_nums: bool = True) -> str:
         deep_dict = self._to_deep_dict(remove_nulls, stringify_nums)
@@ -45,7 +45,7 @@ class Serializable(object):
             else:
                 return val
         elif isinstance(val, datetime):
-            return val.strftime(cls.vertica_format)
+            return val.strftime(cls.date_time_fmt)
         elif val is None:
             return '' if blankify_nones else None
         elif isinstance(val, dict):

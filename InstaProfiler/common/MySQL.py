@@ -63,6 +63,7 @@ class MySQLHelper(object):
                                                                           vals=', '.join(['?'] * len(columns)))
         data = [[getattr(record, field) for field in record.export_order()] for record in records]
         final_cursor = cursor or self.get_cursor()
+        self.logger.debug("running sql: %s", sql)
         final_cursor.executemany(sql, data)
         if cursor is None:
             # Cursor was not given

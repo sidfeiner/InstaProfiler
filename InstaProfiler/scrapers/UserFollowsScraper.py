@@ -79,9 +79,13 @@ class UserFollowsScraper(InstagramScraper):
         all_users = set()  # type: Set[InstaUser]
         while True:
             driver.get(request_url)
-            data = json.loads(driver.find_element_by_tag_name('body').text)['data']['user'][data_key]
-            end_cursor = data['page_info']['end_cursor'] if data['page_info']['has_next_page'] else None
-            users = {InstaUser.from_dict(user['node']) for user in data['edges']}
+            try:
+                data = json.loads(driver.find_element_by_tag_name('body').text)['data']['user'][data_key]
+                end_cursor = data['page_info']['end_cursor'] if data['page_info']['has_next_page'] else None
+                users = {InstaUser.from_dict(user['node']) for user in data['edges']}
+            except Exception as e:
+                self.logger.exception("driver body: {0}".format(driver.find_element_by_tag_name('body').text))
+                raise e
             self.logger.info('Currently scraped %d users', len(users))
             all_users.update(users)
             if end_cursor is None:
