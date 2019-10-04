@@ -4,6 +4,10 @@ from decimal import Decimal
 from typing import Optional
 
 
+class UserDoesNotExist(Exception):
+    pass
+
+
 class Serializable(object):
     date_time_fmt = "%Y-%m-%d %H:%M:%S"
 
@@ -76,7 +80,8 @@ class Serializable(object):
 class InstaUser(Serializable):
     def __init__(self, user_id: int, username: str, full_name: Optional[str] = None,
                  profile_pic_url: Optional[str] = None, is_private: Optional[bool] = None,
-                 is_verified: Optional[bool] = None, followed_by_viewer: Optional[bool] = None, *args, **kwargs):
+                 is_verified: Optional[bool] = None, followed_by_viewer: Optional[bool] = None,
+                 follows_amount: Optional[int] = None, followed_by_amount: Optional[int] = None, *args, **kwargs):
         self.user_id = user_id
         self.username = username
         self.full_name = full_name
@@ -84,6 +89,8 @@ class InstaUser(Serializable):
         self.is_private = is_private
         self.is_verified = is_verified
         self.followed_by_viewer = followed_by_viewer
+        self.follows_amount = follows_amount
+        self.followed_by_amount = followed_by_amount
 
     def __eq__(self, other: 'InstaUser'):
         if not isinstance(other, InstaUser):
@@ -100,4 +107,8 @@ class InstaUser(Serializable):
     def from_dict(cls, attr_dict: dict) -> 'InstaUser':
         if 'user_id' not in attr_dict:
             attr_dict['user_id'] = int(attr_dict['id'])
+        if 'edge_followed_by' in attr_dict:
+            attr_dict['followed_by_amount'] = attr_dict['edge_followed_by']['count']
+        if 'edge_follow' in attr_dict:
+            attr_dict['follows_amount'] = attr_dict['edge_follow']['count']
         return super().from_dict(attr_dict)

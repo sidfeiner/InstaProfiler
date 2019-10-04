@@ -1,8 +1,9 @@
 import logging
 import os
+from json.decoder import JSONDecodeError
 from time import sleep
 import json
-from typing import Optional, Union
+from typing import Optional, Union, Callable
 import pickle
 from selenium.webdriver import Chrome, ChromeOptions
 from selenium.webdriver.remote.webdriver import WebDriver
@@ -29,6 +30,10 @@ class QueryHashes:
     STORY_VIEWERS = 'de8017ee0a7c9c45ec4260733d81ea31'
     MEDIA = "f2405b236d85e8296cf30347c9f08c2a"
     MEDIA_LIKES = "d5d763b1e2acf209d62d22d184488e57"
+
+
+class MaxRetriesReached(Exception):
+    pass
 
 
 class InstagramScraper(object):
@@ -116,11 +121,39 @@ class InstagramScraper(object):
         self.driver.get(self.INSTA_URL)
         sleep(1)
 
-    def scrape_user(cls, driver: WebDriver, user_name: str):
-        cls.logger.info('Scraping user data for %s', user_name)
-        driver.get('{0}/{1}/?__a=1'.format(cls.INSTA_URL, user_name))
-        user_data = json.loads(driver.find_element_by_tag_name('body').text)['graphql']['user']
-        return InstaUser.from_dict(user_data)
+    def get_url_data(self, url: str, is_valid_func: Callable[[str, ], bool], max_allowed_retries: int = 10,
+                     wait_seconds: int = 20):
+        retries = 0
+        self.driver.get(url)
+        data = self.driver.find_element_by_tag_name('body').text
+        while not is_valid_func(data) and retries < max_allowed_retries:
+            self.logger.warning("Waiting %d seconds", wait_seconds)
+            sleep(wait_seconds)
+            retries += 1
+            self.driver.get(url)
+            data = self.driver.find_element_by_tag_name('body').text
+
+        if retries == max_allowed_retries:
+            raise MaxRetriesReached()
+        return data
+
+    def scrape_user(self, user_name: str, driver: Optional[WebDriver] = None) -> Optional[InstaUser]:
+        """Scrapes InstaUser data. Returns None if user doesn't exist"""
+        self.logger.info('Scraping user data for %s', user_name)
+        if driver is None:
+            self.init_driver()
+            driver = self.driver
+        driver.get('{0}/{1}/?__a=1'.format(self.INSTA_URL, user_name))
+        try:
+            user_data = json.loads(driver.find_element_by_tag_name('body').text)['graphql']['user']
+            return InstaUser.from_dict(user_data)
+        except KeyError as e:
+            return None
+        except JSONDecodeError as e:
+            return None
+        except Exception as e:
+            self.logger.error("Failed parsing following: %s", driver.find_element_by_tag_name('body').text)
+            raise e
 
     def init_driver(self):
         if self.driver is None:

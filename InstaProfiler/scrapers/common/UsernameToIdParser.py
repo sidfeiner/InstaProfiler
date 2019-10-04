@@ -1,4 +1,4 @@
-from InstaProfiler.scrapers.InstagramScraper import InstagramScraper
+from InstaProfiler.scrapers.common.InstagramScraper import InstagramScraper
 import fire
 
 

@@ -10,9 +10,9 @@ from InstaProfiler.common.MySQL import InsertableDuplicate, MySQLHelper
 import json
 from typing import List, Optional
 
-from InstaProfiler.scrapers.InstagramScraper import InstagramScraper, QueryHashes
-from InstaProfiler.scrapers.media.LikersScraper import LikersScraper
-from InstaProfiler.scrapers.media.base import Media
+from InstaProfiler.scrapers.common.InstagramScraper import InstagramScraper, QueryHashes
+from InstaProfiler.scrapers.common.media import LikersScraper
+from InstaProfiler.scrapers.common.media.base import Media
 
 
 class MediaLikersScraping(object):

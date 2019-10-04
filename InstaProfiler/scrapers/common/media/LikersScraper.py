@@ -9,8 +9,8 @@ import json
 from typing import List, Optional
 
 from InstaProfiler.common.base import InstaUser
-from InstaProfiler.scrapers.InstagramScraper import InstagramScraper, QueryHashes
-from InstaProfiler.scrapers.media.base import Media
+from InstaProfiler.scrapers.common.InstagramScraper import InstagramScraper, QueryHashes
+from InstaProfiler.scrapers.common.media.base import Media
 
 DEFAULT_BATCH_SIZE = 100
 RATE_LIMIT_REACHED_WAIT_SECONDS = 1 * 60  # 3 minutes

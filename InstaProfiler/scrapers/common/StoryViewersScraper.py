@@ -11,7 +11,7 @@ import json
 from typing import List, Optional, Set
 
 from InstaProfiler.common.base import Serializable, InstaUser
-from InstaProfiler.scrapers.InstagramScraper import InstagramScraper, QueryHashes
+from InstaProfiler.scrapers.common.InstagramScraper import InstagramScraper, QueryHashes
 
 
 class RankedUser(InstaUser):

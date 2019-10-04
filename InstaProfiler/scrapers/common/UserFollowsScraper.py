@@ -11,9 +11,9 @@ import pandas as pd
 from selenium.webdriver.remote.webdriver import WebDriver
 
 from InstaProfiler.common.LoggerManager import LoggerManager
-from InstaProfiler.common.MySQL import MySQLHelper, InsertableDuplicate, Updatable
-from InstaProfiler.common.base import Serializable, InstaUser
-from InstaProfiler.scrapers.InstagramScraper import InstagramScraper, QueryHashes, DEFAULT_USER_NAME
+from InstaProfiler.common.MySQL import MySQLHelper, InsertableDuplicate, Updatable, Insertable
+from InstaProfiler.common.base import Serializable, InstaUser, UserDoesNotExist
+from InstaProfiler.scrapers.common.InstagramScraper import InstagramScraper, QueryHashes, DEFAULT_USER_NAME
 
 LOG_PATH = "/home/sid/personal/Projects/InstaProfiler/logs/follows.log"
 
@@ -78,9 +78,11 @@ class UserFollowsScraper(InstagramScraper):
         request_url = self.create_url(query_hash, user_id)
         all_users = set()  # type: Set[InstaUser]
         while True:
-            driver.get(request_url)
+            body = self.get_url_data(request_url,
+                                     lambda x: 'data' in x and 'user' in x['data'] and data_key in x['data']['user'][
+                                         data_key])
             try:
-                data = json.loads(driver.find_element_by_tag_name('body').text)['data']['user'][data_key]
+                data = json.loads(body)['data']['user'][data_key]
                 end_cursor = data['page_info']['end_cursor'] if data['page_info']['has_next_page'] else None
                 users = {InstaUser.from_dict(user['node']) for user in data['edges']}
             except Exception as e:
@@ -120,20 +122,20 @@ class UserFollowsScraper(InstagramScraper):
         self.logger.info('parsing following')
         return self.scrape_follow_type(driver, user_name, QueryHashes.FOLLOWING)
 
-    def parse_user_follows(self, user_names: List[str], only_follows: bool = False,
-                           only_followers: bool = False) -> FollowScrape:
+    def parse_user_follows(self, user_names: List[str], scrape_follows: bool = True,
+                           scrape_followers: bool = True) -> FollowScrape:
         self.init_driver()
         scrape_id = str(uuid.uuid4())
         scrape_ts = datetime.now()
         users_follows = []
         for user_name in user_names:
             self.logger.info("Scraping user follows for user %s", user_name)
-            user = self.scrape_user(self.driver, user_name)
+            user = self.scrape_user(user_name)
             followers = following = set()
-            if not only_follows:
-                followers = self.parse_followers(self.driver, user_name)
-            if not only_followers:
+            if scrape_follows:
                 following = self.parse_following(self.driver, user_name)
+            if scrape_followers:
+                followers = self.parse_followers(self.driver, user_name)
             users_follows.append(UserFollows(user, followers, following))
         return FollowScrape(users_follows, scrape_id, scrape_ts)
 
@@ -176,6 +178,38 @@ class FollowRecord(InsertableDuplicate):
                 self.dst_follows_latest_timestamp, self.dst_unfollows_latest_timestamp]
 
 
+class FOLLOW_TYPE_IDS:
+    FOLLOW = 1
+    UNFOLLOW = 0
+
+
+class RawFollowEventRecord(Insertable):
+    def __init__(self, src_user_id: int, src_user_name: str, dst_user_id: int, dst_user_name: str, follow_type_id: int,
+                 ts: datetime):
+        self.src_user_id = src_user_id
+        self.src_user_name = src_user_name
+        self.dst_user_id = dst_user_id
+        self.dst_user_name = dst_user_name
+        self.follow_type_id = follow_type_id
+        self.ts = ts
+
+    @classmethod
+    def export_order(cls) -> List[str]:
+        return ["src_user_id", "src_user_name", "dst_user_id", "dst_user_name", "follow_type_id", "ts"]
+
+
+class RawFollowRecord(RawFollowEventRecord):
+    def __init__(self, src_user_id: int, src_user_name: str, dst_user_id: int, dst_user_name: str,
+                 ts: datetime):
+        super().__init__(src_user_id, src_user_name, dst_user_id, dst_user_name, FOLLOW_TYPE_IDS.FOLLOW, ts)
+
+
+class RawUnfollowRecord(RawFollowEventRecord):
+    def __init__(self, src_user_id: int, src_user_name: str, dst_user_id: int, dst_user_name: str,
+                 ts: datetime):
+        super().__init__(src_user_id, src_user_name, dst_user_id, dst_user_name, FOLLOW_TYPE_IDS.UNFOLLOW, ts)
+
+
 class UpdateUnfollow(Updatable):
     def __init__(self, src_user_id: str, dst_user_id: str, dst_unfollows_latest_timestamp: datetime):
         self.src_user_id = src_user_id
@@ -196,6 +230,7 @@ class UpdateUnfollow(Updatable):
 
 class UserFollowsAudit(object):
     FOLLOWS_TABLE = "follows"
+    RAW_FOLLOWS_TABLE = "follow_events"
 
     def __init__(self, log_path: Optional[str] = None, log_level: Union[str, int] = logging.DEBUG,
                  log_to_console: bool = True):
@@ -217,51 +252,117 @@ class UserFollowsAudit(object):
         return UserFollows(InstaUser(res[0].src_user_id, res[0].src_user_name, res[0].src_user_name), followers,
                            follows)
 
-    def main(self, user: str = DEFAULT_USER_NAME, only_mutual: bool = False, only_follows: bool = False,
-             only_followers: bool = False):
-        """
-        :param user: User to parse its follows
-        :param only_mutual: If set to True, will save only people that are both followers and follows.
-                            Useful when src has many followers. This will make sure only "relevant" people are saved
-        :return:
-        """
-        scraper = UserFollowsScraper()
-        follow_scrape = scraper.parse_user_follows([user], only_follows, only_followers)
-        follows, scrape_id, scrape_ts = follow_scrape.follows, follow_scrape.scrape_id, follow_scrape.scrape_ts
+    def _update_agg_unfollowers(self, mysql: MySQLHelper, cursor: Cursor, unfollowers: Set[InstaUser], src_user: str,
+                                scrape_ts: datetime, follow_side: str):
+        """Update agg table with unfollowers"""
+        self.logger.info("Updating unfollowers in agg table (found %d)", len(unfollowers))
+        ids = ', '.join(["'{0}'".format(dst_user.user_id) for dst_user in unfollowers])
+        params = [scrape_ts, src_user]
+        sql = """
+                                UPDATE {table}
+                                SET {side}_unfollows_latest_timestamp = ?, {side}_follows = 0
+                                WHERE src_user_name = ? and {side}_user_id in ({ids})
+                            """.format(table=self.FOLLOWS_TABLE, ids=ids, side=follow_side)
+        mysql.execute(sql, params, cursor)
+        self.logger.info("Done updating agg table records")
 
-        mysql = MySQLHelper('mysql-insta-local')
-        cursor = mysql.get_cursor()
-        current_follows = self.get_current_follows(mysql, user)
-        analyzed, users = UserFollowsAnalyzer.analyze_follows(follows, only_mutual)
+    def update_agg_src_unfollowers(self, mysql: MySQLHelper, cursor: Cursor, unfollowers: Set[InstaUser], src_user: str,
+                                   scrape_ts: datetime):
+        self._update_agg_unfollowers(mysql, cursor, unfollowers, src_user, scrape_ts, "src")
 
-        # Update unfollowers
-        dst_who_unfollowed = set() if current_follows is None else current_follows.followers.difference(
-            follows[0].followers)
-        if len(dst_who_unfollowed) > 0:
-            self.logger.info("Updating unfollowers (found %d)", len(dst_who_unfollowed))
-            ids = ', '.join(["'{0}'".format(dst_user.user_id) for dst_user in dst_who_unfollowed])
-            params = [scrape_ts, user]
-            sql = """
-                        UPDATE {table}
-                        SET dst_unfollows_latest_timestamp = ?, dst_follows = 0
-                        WHERE src_user_name = ? and dst_user_id in ({ids})
-                    """.format(table=self.FOLLOWS_TABLE, ids=ids)
-            mysql.execute(sql, params, cursor)
-            self.logger.info("Done updating records")
+    def update_agg_dst_unfollowers(self, mysql: MySQLHelper, cursor: Cursor, unfollowers: Set[InstaUser], src_user: str,
+                                   scrape_ts: datetime):
+        self._update_agg_unfollowers(mysql, cursor, unfollowers, src_user, scrape_ts, "dst")
 
-        # Insert new records
-        self.logger.info("Inserting records...")
+    def insert_raw_unfollowers(self, mysql: MySQLHelper, cursor: Cursor, unfollowers: Set[InstaUser],
+                               src_user: InstaUser, scrape_ts: datetime):
+        """Insert raw records to table"""
+        self.logger.info("Insert raw unfollows...")
+        records = [RawUnfollowRecord(src_user.user_id, src_user.username, user.user_id, user.username, scrape_ts) for
+                   user in unfollowers]
+        mysql.insert_ignore(self.RAW_FOLLOWS_TABLE, records, cursor)
+        self.logger.info("Done updating raw table records")
+
+    def handle_unfollowers(self, mysql: MySQLHelper, cursor: Cursor, users: Set[InstaUser], src_user: InstaUser,
+                           scrape_ts: datetime):
+        self.update_agg_src_unfollowers(mysql, cursor, users, src_user.username, scrape_ts)
+        self.insert_raw_unfollowers(mysql, cursor, users, src_user, scrape_ts)
+
+    def update_agg_followers(self, mysql: MySQLHelper, cursor: Cursor, follows: List[UserFollows],
+                             analyzed: (List[dict], Dict[str, InstaUser]), users: Dict[int, InstaUser],
+                             unfollowers: Set[InstaUser], scrape_ts: datetime):
+        self.logger.info("Inserting following records into agg table...")
         records = []
         src_user = follows[0].user
         for f in analyzed:
             dst_user = users[f['dst_id']]
-            unfollow_ts = scrape_ts if dst_user in dst_who_unfollowed else None
+            unfollow_ts = scrape_ts if dst_user in unfollowers else None
             records.append(FollowRecord(src_user.user_id, src_user.username, dst_user.user_id, dst_user.username,
                                         f['src_follows'], scrape_ts, scrape_ts, f['dst_follows'], scrape_ts, scrape_ts,
                                         unfollow_ts))
 
         mysql.insert_on_duplicate_update(self.FOLLOWS_TABLE, records, cursor)
-        self.logger.info("Done inserting records.")
+        self.logger.info("done insert follows to agg table")
+
+    def insert_raw_followers(self, mysql: MySQLHelper, cursor: Cursor, unfollowers: Set[InstaUser],
+                             src_user: InstaUser, scrape_ts: datetime):
+        """Insert raw records to table"""
+        self.logger.info("Insert raw follows...")
+        records = [RawFollowRecord(src_user.user_id, src_user.username, user.user_id, user.username, scrape_ts) for
+                   user in unfollowers]
+        mysql.insert_ignore(self.RAW_FOLLOWS_TABLE, records, cursor)
+        self.logger.info("Done updating raw table records")
+
+    def main(self, username: str = DEFAULT_USER_NAME, only_mutual: bool = False, scrape_follows: bool = True,
+             scrape_followers: bool = True, max_follow_amount: Optional[int] = None,
+             scraper: Optional[UserFollowsScraper] = None):
+        """
+        :param username: User to parse its follows
+        :param only_mutual: If set to True, will save only people that are both followers and follows.
+                            Useful when src has many followers. This will make sure only "relevant" people are saved
+        :param scrape_follows: If given, will only scrape user's follow
+        :param scrape_followers: If given, will only scrape user's followers
+        :param max_follow_amount: If given, will only scrape follows (follows/followers apart) if amount is
+                                  under max_follow_amount
+        :return:
+        """
+        scraper = scraper or UserFollowsScraper()
+        user = scraper.scrape_user(username)
+        if user is None:
+            raise UserDoesNotExist()
+        if max_follow_amount is not None and user.followed_by_amount > max_follow_amount:
+            scrape_followers = False
+        if max_follow_amount is not None and user.followed_by_viewer > max_follow_amount:
+            scrape_follows = False
+
+        follow_scrape = scraper.parse_user_follows([username], scrape_follows, scrape_followers)
+        follows, scrape_id, scrape_ts = follow_scrape.follows, follow_scrape.scrape_id, follow_scrape.scrape_ts
+
+        mysql = MySQLHelper('mysql-insta-local')
+        cursor = mysql.get_cursor()
+        current_follows = self.get_current_follows(mysql, username)
+        analyzed, users = UserFollowsAnalyzer.analyze_follows(follows, only_mutual)
+
+        # Update unfollowers
+        if scrape_follows:
+            # No followers are scraped so they could all be considered as unfollowed
+            dst_has_unfollowed = set() if current_follows is None else current_follows.followers.difference(
+                follows[0].followers)
+            if len(dst_has_unfollowed) > 0:
+                self.update_agg_dst_unfollowers(mysql, cursor, dst_has_unfollowed, user.username, scrape_ts)
+
+        src_has_unfollowed = set() if current_follows is None else current_follows.follows.difference(
+            follows[0].follows)
+        if len(src_has_unfollowed):
+            self.handle_unfollowers(mysql, cursor, src_has_unfollowed, user, scrape_ts)
+
+        # Insert new records
+        if sum(len(x.follows) for x in follows) > 0:
+            self.update_agg_followers(mysql, cursor, follows, analyzed, users, src_has_unfollowed, scrape_ts)
+            new_follows = follows[0].follows if current_follows is None else follows[0].follows.difference(
+                current_follows.follows)
+            if len(new_follows) > 0:
+                self.insert_raw_followers(mysql, cursor, new_follows, user, scrape_ts)
 
         mysql.commit()
         cursor.close()
@@ -309,11 +410,11 @@ class UserFollowsAnalyzer(object):
         return final_results
 
     @classmethod
-    def main(cls, user: str):
+    def main(cls, username: str):
         # with open('/home/sid/Desktop/uf.json') as fp:
         #     users_follows_dict = json.load(fp)
         # users_follows = [UserFollows.from_dict(x) for x in users_follows_dict]
-        users_follows = UserFollowsScraper.parse_user_follows([user])
+        users_follows = UserFollowsScraper.parse_user_follows([username])
         top_follows = cls.analyze_follows(users_follows.follows)
         for record in top_follows:
             print(record)
