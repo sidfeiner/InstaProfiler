@@ -24,22 +24,38 @@ class UserGroupFollowsScraper(object):
                  left join follows f on ug.user_id = f.src_user_id
         where group_name = ?
         group by ug.user_id, ug.user_name
-        order by last_scrape asc;
+        order by last_scrape asc
     """
 
-    def get_users(self, group_name: str, mysql: MySQLHelper) -> List[InstaUser]:
+    GET_USERS_WITH_LIMITED_FOLLOWS_QUERY = """
+    select * from (
+    {0}
+    ) a
+    where not exists(select 1 from users u where u.user_id = a.user_id and u.follows_amount > ?)
+    order by last_scrape asc
+    """.format(GET_USERS_QUERY)
+
+    def get_users(self, group_name: str, mysql: MySQLHelper, max_follows: Optional[int] = None,
+                  limit: Optional[int] = None) -> List[InstaUser]:
         """Gets users to scrape it's followers. Ordered by ascending last_scrape_ts
         So it will start parsing users we haven't scraped lately
         """
         self.logger.debug("Getting users for group %s", group_name)
-        res = mysql.query(self.GET_USERS_QUERY, [group_name])
+        query = self.GET_USERS_WITH_LIMITED_FOLLOWS_QUERY if max_follows is not None else self.GET_USERS_QUERY
+        if limit is not None:
+            query += " limit {}".format(limit)
+        params = [group_name]
+        if max_follows:
+            params.append(max_follows)
+        res = mysql.query(query, params)
         users = [InstaUser(row.user_id, row.user_name) for row in res]
         self.logger.debug("Done querying users")
         return users
 
-    def main(self, group_name: str, scrape_follows: bool = True, scrape_followers: bool = True):
+    def main(self, group_name: str, scrape_follows: bool = True, scrape_followers: bool = True,
+             limit_users: Optional[int] = None, max_follows_to_scrape_amount: Optional[int] = 500):
         mysql = MySQLHelper('mysql-insta-local')
-        users = self.get_users(group_name, mysql)
+        users = self.get_users(group_name, mysql, max_follows=max_follows_to_scrape_amount, limit=limit_users)
         self.logger.info("Found %d users for group %s", len(users), group_name)
         core_scraper = UserFollowsScraper()
         scraper = UserFollowsAudit()
@@ -47,7 +63,7 @@ class UserGroupFollowsScraper(object):
             self.logger.info("Handling user %s", user.username)
             try:
                 scraper.main(user.username, scrape_follows=scrape_follows, scrape_followers=scrape_followers,
-                             scraper=core_scraper)
+                             scraper=core_scraper, max_follow_amount=max_follows_to_scrape_amount)
             except UserDoesNotExist as e:
                 self.logger.warning("User %s does not exist. skip.", user.username)
             self.logger.info("Done handling user %s", user.username)

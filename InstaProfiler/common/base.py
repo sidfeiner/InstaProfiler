@@ -1,7 +1,9 @@
 import json
 from datetime import datetime
 from decimal import Decimal
-from typing import Optional
+from typing import Optional, List
+
+from InstaProfiler.common.MySQL import InsertableDuplicate
 
 
 class UserDoesNotExist(Exception):
@@ -112,3 +114,39 @@ class InstaUser(Serializable):
         if 'edge_follow' in attr_dict:
             attr_dict['follows_amount'] = attr_dict['edge_follow']['count']
         return super().from_dict(attr_dict)
+
+
+class InstaUserRecord(InsertableDuplicate):
+    def __init__(self, created_ts: datetime, user_id: int, user_name: str, full_name: Optional[str] = None,
+                 is_private: Optional[bool] = None, is_verified: Optional[bool] = None,
+                 follows_amount: Optional[int] = None, followed_by_amount: Optional[int] = None):
+        self.created_ts = created_ts
+        self.latest_ts = created_ts
+        self.user_id = user_id
+        self.user_name = user_name
+        self.full_name = full_name
+        self.is_private = is_private
+        self.is_verified = is_verified
+        self.follows_amount = follows_amount
+        self.followed_by_amount = followed_by_amount
+
+    @classmethod
+    def on_duplicate_update_sql(cls) -> str:
+        return "user_name = ?, full_name = ?, is_private = ?, is_verified = ?, follows_amount = ?, " \
+               "followed_by_amount = ?, latest_ts = ?"
+
+    def on_duplicate_update_params(self) -> List:
+        return [self.user_name, self.full_name, self.is_private, self.is_verified, self.follows_amount,
+                self.followed_by_amount, self.latest_ts]
+
+    @classmethod
+    def from_insta_user(cls, created_ts: datetime, user: InstaUser):
+        return InstaUserRecord(created_ts, user.user_id, user.username, user.full_name, user.is_private,
+                               user.is_verified, user.follows_amount, user.followed_by_amount)
+
+    @classmethod
+    def export_order(cls) -> List[str]:
+        return ["user_id", "user_name", "full_name", "is_private", "is_verified", "follows_amount", "followed_by_amount",
+                "created_ts", "latest_ts"]
+
+

@@ -12,7 +12,7 @@ from InstaProfiler.common.base import InstaUser
 
 CHROME_DRIVER_PATH = '/home/sid/miniconda3/bin/chromedriver'
 LOGIN_BTN_XPATH = '//button[contains(text(), "Log in")]'
-LOGIN_USER_INPUT_XPATH = '//div[@id="email_input_container"]/input'
+LOGIN_USER_INPUT_XPATH = '//div[@id="email_container"]/input'
 LOGIN_PWD_INPUT_XPATH = '//input[@type="password"]'
 LOGIN_SUBMIT_INPUT_XPATH = '//button[@name="login"]'
 LOGIN_AS_USER_BTN_XPATH = '//div[contains(text(), "Continue as")]'
@@ -121,8 +121,8 @@ class InstagramScraper(object):
         self.driver.get(self.INSTA_URL)
         sleep(1)
 
-    def get_url_data(self, url: str, is_valid_func: Callable[[str, ], bool], max_allowed_retries: int = 10,
-                     wait_seconds: int = 20):
+    def get_url_data(self, url: str, is_valid_func: Callable[[str, ], bool], max_allowed_retries: int = 120,
+                     wait_seconds: int = 60):
         retries = 0
         self.driver.get(url)
         data = self.driver.find_element_by_tag_name('body').text
@@ -137,15 +137,17 @@ class InstagramScraper(object):
             raise MaxRetriesReached()
         return data
 
-    def scrape_user(self, user_name: str, driver: Optional[WebDriver] = None) -> Optional[InstaUser]:
+    def scrape_user(self, user_name: str, driver: Optional[WebDriver] = None,
+                    max_retries: int = 100, wait_seconds: int = 150) -> Optional[InstaUser]:
         """Scrapes InstaUser data. Returns None if user doesn't exist"""
         self.logger.info('Scraping user data for %s', user_name)
         if driver is None:
             self.init_driver()
             driver = self.driver
-        driver.get('{0}/{1}/?__a=1'.format(self.INSTA_URL, user_name))
+        body = self.get_url_data('{0}/{1}/?__a=1'.format(self.INSTA_URL, user_name), lambda x: 'minutes' not in x,
+                                 max_retries, wait_seconds)
         try:
-            user_data = json.loads(driver.find_element_by_tag_name('body').text)['graphql']['user']
+            user_data = json.loads(body)['graphql']['user']
             return InstaUser.from_dict(user_data)
         except KeyError as e:
             return None

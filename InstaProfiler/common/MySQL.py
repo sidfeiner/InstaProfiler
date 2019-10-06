@@ -49,18 +49,27 @@ class InsertableDuplicate(Insertable):
 class MySQLHelper(object):
     def __init__(self, dsn_name: str):
         self.logger = LoggerManager.get_logger(__name__)
-        self.connection = pyodbc.connect('DSN={0}'.format(dsn_name))  # type: Connection
+        cnxn = pyodbc.connect('DSN={0}'.format(dsn_name))  # type: Connection
+        cnxn.setdecoding(pyodbc.SQL_CHAR, encoding='utf-8')
+        cnxn.setdecoding(pyodbc.SQL_WCHAR, encoding='utf-8')
+        cnxn.setencoding(encoding='utf-8')
+        self.connection = cnxn
 
     def get_cursor(self) -> Cursor:
-        self.logger.info("Getting cursor...")
+        self.logger.debug("Getting cursor...")
         return self.connection.cursor()  # type: Cursor
 
     def insert_ignore(self, table: str, records: List[Insertable], cursor: Optional[Cursor] = None):
+        self.insert(table, records, cursor, ignore=True)
+
+    def insert(self, table: str, records: List[Insertable], cursor: Optional[Cursor] = None, ignore: bool = False):
         assert len(records[0].target_columns()) == len(records[0].export_order())
         self.logger.info("Inserting ignore...")
         columns = records[0].target_columns()
-        sql = "INSERT IGNORE INTO {table} ({cols}) VALUES({vals})".format(table=table, cols=', '.join(columns),
-                                                                          vals=', '.join(['?'] * len(columns)))
+        sql = "INSERT {ignore}INTO {table} ({cols}) VALUES({vals})".format(ignore="IGNORE " if ignore else "",
+                                                                           table=table,
+                                                                           cols=', '.join(columns),
+                                                                           vals=', '.join(['?'] * len(columns)))
         data = [[getattr(record, field) for field in record.export_order()] for record in records]
         final_cursor = cursor or self.get_cursor()
         self.logger.debug("running sql: %s", sql)
