@@ -10,8 +10,9 @@ from InstaProfiler.common.MySQL import InsertableDuplicate, MySQLHelper
 import json
 from typing import List, Optional
 
+from InstaProfiler.common.base import InstaUser
 from InstaProfiler.scrapers.common.InstagramScraper import InstagramScraper, QueryHashes
-from InstaProfiler.scrapers.common.media import LikersScraper
+from InstaProfiler.scrapers.common.media.LikersScraper import LikersScraper
 from InstaProfiler.scrapers.common.media.base import Media
 
 
@@ -41,38 +42,40 @@ class MediaScraper(InstagramScraper):
         return vars
 
     @classmethod
-    def create_url(cls, query_hash: str, user_id: str, after_cursor: Optional[str] = None, batch_size: int = 15):
+    def create_url(cls, query_hash: str, user_id: int, after_cursor: Optional[str] = None, batch_size: int = 15):
         vars_dict = cls._create_request_vars(user_id, batch_size, after_cursor)
         vars_str = json.dumps(vars_dict)
         return "{url}?query_hash={hash}&variables={vars}".format(url=cls.GRAPH_URL, hash=query_hash, vars=vars_str)
 
-    def scrape_media(self, scrape_likers: bool = True, scrape_comments: bool = True,
-                     likers_scrape_threshold: Optional[int] = None,
-                     media_max_likers_amount: Optional[int] = None) -> MediaLikersScraping:
+    def scrape_media(self, user: InstaUser, scrape_likers: bool = True, scrape_comments: bool = True,
+                     likers_scrape_threshold: Optional[int] = None, media_max_likers_amount: Optional[int] = None,
+                     max_media_limit: Optional[int] = None
+                     ) -> MediaLikersScraping:
         """
+        :param user: User whose media we want to parse
         :param scrape_likers: If True, will scrape media's likers
         :param scrape_comments: If True, will scrape media's comments
         :param likers_scrape_threshold: If media has more than this threshold's likers, likers will NOT be scraped,
                                         disregarding the `scrape_likers` param
         :param media_max_likers_amount: If media's likers will be parsed and this parameter is set, this will
                                             be the limit of likers that can be parsed
+        :param max_media_limit: If set, this will be the maximum amount of media objects to parse
         """
         self.init_driver()
         scrape_id = str(uuid.uuid4())
         scrape_ts = datetime.now()
         self.logger.info('Scraping viewers (scrape id %s)', scrape_id)
         self.to_home_page()
-        my_user_id, my_user_name = self.parse_current_user_info()
-        request_url = self.create_url(QueryHashes.MEDIA, my_user_id)
+        # my_user_id, my_user_name = self.parse_current_user_info()
+        request_url = self.create_url(QueryHashes.MEDIA, user.user_id)
         all_media = {}  # type: Dict[int, Story]
 
         if scrape_likers:
+            self.logger.info("Initing LikersScaper...")
             likers_scraper = LikersScraper(self._log_path, self._log_level, self._log_to_console, driver=self.driver)
         while True:
-            self.driver.get(request_url)
             self.logger.info("Parsing media from page...")
-            data = json.loads(self.driver.find_element_by_tag_name('body').text)['data']['user'][
-                'edge_owner_to_timeline_media']
+            data = self.get_url_json_data(request_url, lambda x: 'data' in x)['data']['user']['edge_owner_to_timeline_media']
             media_objects = [media_object['node'] for media_object in data['edges']]
             next_cursor = data['page_info']
 
@@ -83,13 +86,15 @@ class MediaScraper(InstagramScraper):
                 if scrape_likers and (likers_scrape_threshold is None or media.likes_amount <= likers_scrape_threshold):
                     media.likers = likers_scraper.scrape_media_likers(media, scrape_id, scrape_ts,
                                                                       max_likers_amount=media_max_likers_amount).likers
-                    self.logger.info("Found %d likers for media %d at url %s", len(media.likers), media.id, media.display_url)
+                    self.logger.info("Found %d likers for media %d at url %s", len(media.likers), media.id,
+                                     media.display_url)
             self.logger.info("Parsed %d media objects", len(media_objects))
 
-            if next_cursor['has_next_page'] is False:
+            if next_cursor['has_next_page'] is False or (
+                    max_media_limit is not None and len(all_media) >= max_media_limit):
                 break
             next_cursor = next_cursor['end_cursor']
-            request_url = self.create_url(QueryHashes.MEDIA, my_user_id, next_cursor)
+            request_url = self.create_url(QueryHashes.MEDIA, user.user_id, next_cursor)
 
         return MediaLikersScraping(list(all_media.values()), scrape_id, scrape_ts)
 
@@ -236,13 +241,23 @@ class MediaLikersAudit(object):
                                                                      media_interactions_records, cursor)
         return media_cnt, taggees_cnt, operations_cnt
 
-    def main(self):
-        mysql = MySQLHelper('mysql-insta-local')
-        scraper = MediaScraper()
-        scrape_result = scraper.scrape_media(likers_scrape_threshold=50)
-        self.save_results(scrape_result, mysql)
-        mysql.commit()
-        mysql.close()
+    def main(self, user: InstaUser, scraper: Optional[MediaScraper] = None, scrape_likers: bool = False,
+             scrape_comments: bool = False, likers_scrape_threshold: Optional[int] = None,
+             media_max_likers_amount: Optional[int] = None, max_media_limit: Optional[int] = None):
+        scraper = scraper or MediaScraper()
+
+        if not user.from_full_profile:
+            user = scraper.scrape_user(user.username)
+
+        if user.is_private and not user.followed_by_viewer:
+            self.logger.warning("user is private and not followed by viewer. skipping scraping...")
+        else:
+            mysql = MySQLHelper('mysql-insta-local')
+            scrape_result = scraper.scrape_media(user, scrape_likers, scrape_comments, likers_scrape_threshold,
+                                                 media_max_likers_amount, max_media_limit)
+            self.save_results(scrape_result, mysql)
+            mysql.commit()
+            mysql.close()
 
 
 if __name__ == '__main__':

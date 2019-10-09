@@ -137,6 +137,11 @@ class InstagramScraper(object):
             raise MaxRetriesReached()
         return data
 
+    def get_url_json_data(self, url: str, is_valid_func: Callable[[dict, ], bool], max_allowed_retries: int = 120,
+                     wait_seconds: int = 60):
+        data = self.get_url_data(url, lambda x: is_valid_func(json.loads(x)), max_allowed_retries, wait_seconds)
+        return json.loads(data)
+
     def scrape_user(self, user_name: str, driver: Optional[WebDriver] = None,
                     max_retries: int = 100, wait_seconds: int = 150) -> Optional[InstaUser]:
         """Scrapes InstaUser data. Returns None if user doesn't exist"""

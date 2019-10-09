@@ -83,7 +83,8 @@ class InstaUser(Serializable):
     def __init__(self, user_id: int, username: str, full_name: Optional[str] = None,
                  profile_pic_url: Optional[str] = None, is_private: Optional[bool] = None,
                  is_verified: Optional[bool] = None, followed_by_viewer: Optional[bool] = None,
-                 follows_amount: Optional[int] = None, followed_by_amount: Optional[int] = None, *args, **kwargs):
+                 follows_amount: Optional[int] = None, followed_by_amount: Optional[int] = None,
+                 from_full_profile: bool = False, *args, **kwargs):
         self.user_id = user_id
         self.username = username
         self.full_name = full_name
@@ -93,6 +94,7 @@ class InstaUser(Serializable):
         self.followed_by_viewer = followed_by_viewer
         self.follows_amount = follows_amount
         self.followed_by_amount = followed_by_amount
+        self.from_full_profile = from_full_profile
 
     def __eq__(self, other: 'InstaUser'):
         if not isinstance(other, InstaUser):
@@ -113,6 +115,7 @@ class InstaUser(Serializable):
             attr_dict['followed_by_amount'] = attr_dict['edge_followed_by']['count']
         if 'edge_follow' in attr_dict:
             attr_dict['follows_amount'] = attr_dict['edge_follow']['count']
+        attr_dict['from_full_profile'] = True  # Because this func only get loaded when we load from raw data
         return super().from_dict(attr_dict)
 
 
@@ -146,7 +149,6 @@ class InstaUserRecord(InsertableDuplicate):
 
     @classmethod
     def export_order(cls) -> List[str]:
-        return ["user_id", "user_name", "full_name", "is_private", "is_verified", "follows_amount", "followed_by_amount",
+        return ["user_id", "user_name", "full_name", "is_private", "is_verified", "follows_amount",
+                "followed_by_amount",
                 "created_ts", "latest_ts"]
-
-

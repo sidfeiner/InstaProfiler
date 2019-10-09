@@ -137,7 +137,10 @@ class UserFollowsScraper(InstagramScraper):
         scrape_ts = datetime.now()
         users_follows = []
         for user in users:
-            self.logger.info("Scraping user follows for user %s", user)
+            if scrape_follows or scrape_followers:
+                self.logger.info("Scraping user follows for user %s", user)
+            else:
+                self.logger.info("Skipping user %s", user)
             followers = following = set()
             if scrape_follows:
                 following = self.parse_following(self.driver, user.username)
@@ -350,47 +353,53 @@ class UserFollowsAudit(object):
             self.logger.warning("user is followed by too many people (followed by %d, max %d), skipping followers...",
                                 user.followed_by_amount, max_follow_amount)
             scrape_followers = False
+
         if scrape_follows and max_follow_amount is not None and user.follows_amount > max_follow_amount:
             self.logger.warning("user follows too many people (follows %d, max %d), skipping follows...",
                                 user.follows_amount, max_follow_amount)
             scrape_follows = False
 
-        follow_scrape = scraper.parse_user_follows([user], scrape_follows, scrape_followers)
-        follows, scrape_id, scrape_ts = follow_scrape.follows, follow_scrape.scrape_id, follow_scrape.scrape_ts
         mysql = MySQLHelper('mysql-insta-local')
-
         cursor = mysql.get_cursor()
-        current_follows = self.get_current_follows(mysql, user.username, cursor)
-        analyzed, users = UserFollowsAnalyzer.analyze_follows(follows, only_mutual)
+
+        if user.is_private and not user.followed_by_viewer:
+            self.logger.warning("user is private and not followed by viewer. skipping scraping...")
+            scrape_ts = datetime.now()
+        else:
+            follow_scrape = scraper.parse_user_follows([user], scrape_follows, scrape_followers)
+            follows, scrape_id, scrape_ts = follow_scrape.follows, follow_scrape.scrape_id, follow_scrape.scrape_ts
+
+            current_follows = self.get_current_follows(mysql, user.username, cursor)
+            analyzed, users = UserFollowsAnalyzer.analyze_follows(follows, only_mutual)
+
+            # Update unfollowers
+            if scrape_follows:
+                # No followers are scraped so they could all be considered as unfollowed
+                dst_has_unfollowed = set() if current_follows is None else current_follows.followers.difference(
+                    follows[0].followers)
+                if len(dst_has_unfollowed) > 0:
+                    self.update_agg_dst_unfollowers(mysql, cursor, dst_has_unfollowed, user.username, scrape_ts)
+
+            src_has_unfollowed = set() if current_follows is None else current_follows.follows.difference(
+                follows[0].follows)
+            if len(src_has_unfollowed):
+                self.handle_unfollowers(mysql, cursor, src_has_unfollowed, user, scrape_ts)
+
+            # Insert new records
+            if sum(len(x.follows) for x in follows) > 0:
+                self.update_agg_followers(mysql, cursor, follows, analyzed, users, src_has_unfollowed, scrape_ts)
+                new_follows = follows[0].follows if current_follows is None else follows[0].follows.difference(
+                    current_follows.follows)
+                if len(new_follows) > 0:
+                    self.insert_raw_followers(mysql, cursor, new_follows, user, scrape_ts)
 
         # Update user info
         self.persist_user(mysql, cursor, user, scrape_ts)
 
-        # Update unfollowers
-        if scrape_follows:
-            # No followers are scraped so they could all be considered as unfollowed
-            dst_has_unfollowed = set() if current_follows is None else current_follows.followers.difference(
-                follows[0].followers)
-            if len(dst_has_unfollowed) > 0:
-                self.update_agg_dst_unfollowers(mysql, cursor, dst_has_unfollowed, user.username, scrape_ts)
-
-        src_has_unfollowed = set() if current_follows is None else current_follows.follows.difference(
-            follows[0].follows)
-        if len(src_has_unfollowed):
-            self.handle_unfollowers(mysql, cursor, src_has_unfollowed, user, scrape_ts)
-
-        # Insert new records
-        if sum(len(x.follows) for x in follows) > 0:
-            self.update_agg_followers(mysql, cursor, follows, analyzed, users, src_has_unfollowed, scrape_ts)
-            new_follows = follows[0].follows if current_follows is None else follows[0].follows.difference(
-                current_follows.follows)
-            if len(new_follows) > 0:
-                self.insert_raw_followers(mysql, cursor, new_follows, user, scrape_ts)
-
         mysql.commit()
         cursor.close()
         mysql.close()
-        self.logger.info("DONE")
+        self.logger.info("Done UserFollowsScraper main")
 
 
 class UserFollowsAnalyzer(object):

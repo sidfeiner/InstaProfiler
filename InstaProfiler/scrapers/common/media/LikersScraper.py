@@ -73,15 +73,8 @@ class LikersScraper(InstagramScraper):
         request_url = self.create_url(QueryHashes.MEDIA_LIKES, media.shortcode, batch_size=batch_size)
         all_users = {}  # type: Dict[int, Story]
         while True:
-            self.driver.get(request_url)
-            retries = 0
-            body = self.driver.find_element_by_tag_name('body').text
-            while self._is_failed_response(body) and retries < MAX_ALLOWED_RETRIES:
-                self.logger.warn("Waiting %d seconds", RATE_LIMIT_REACHED_WAIT_SECONDS)
-                sleep(RATE_LIMIT_REACHED_WAIT_SECONDS)
-                retries += 1
-                self.driver.get(request_url)
-                body = self.driver.find_element_by_tag_name('body').text
+            body = self.get_url_data(request_url, self._is_failed_response, MAX_ALLOWED_RETRIES,
+                                     RATE_LIMIT_REACHED_WAIT_SECONDS)
             self.logger.info("Parsing likers from page...")
 
             try:
