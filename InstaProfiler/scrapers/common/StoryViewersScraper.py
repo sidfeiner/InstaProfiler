@@ -113,32 +113,34 @@ class StoryViewersScraper(InstagramScraper):
         all_stories = {}  # type: Dict[str, Story]
         while True:
             self.driver.get(request_url)
-            stories = json.loads(self.driver.find_element_by_tag_name('body').text)['data']['reels_media'][0]['items']
-            next_cursors = []
-            for item in stories:
-                item['story_owner_id'] = my_user_id
-                item['story_owner_user_name'] = my_user_name
-                story = Story.from_dict(item)
-                if story.story_id not in all_stories:
-                    all_stories[story.story_id] = story
+            stories_raw = json.loads(self.driver.find_element_by_tag_name('body').text)['data']['reels_media']
+            if len(stories_raw) > 0:
+                stories = stories_raw[0]['items']
+                next_cursors = []
+                for item in stories:
+                    item['story_owner_id'] = my_user_id
+                    item['story_owner_user_name'] = my_user_name
+                    story = Story.from_dict(item)
+                    if story.story_id not in all_stories:
+                        all_stories[story.story_id] = story
 
-                story_viewers = item['edge_story_media_viewers']
-                page_info = story_viewers['page_info']
-                if page_info['has_next_page']:
-                    next_cursors.append(page_info['end_cursor'])
+                    story_viewers = item['edge_story_media_viewers']
+                    page_info = story_viewers['page_info']
+                    if page_info['has_next_page']:
+                        next_cursors.append(page_info['end_cursor'])
 
-                viewers_edges = story_viewers['edges']
-                # Based on the fact that next_cursor is a number of the last index
-                previous_viewers_amount = len(all_stories[story.story_id].viewers)
-                viewers = {RankedUser.from_dict_and_rank(x['node'], index + previous_viewers_amount + 1) for index, x in
-                           enumerate(viewers_edges)}
-                all_stories[story.story_id].update_viewers(viewers)
+                    viewers_edges = story_viewers['edges']
+                    # Based on the fact that next_cursor is a number of the last index
+                    previous_viewers_amount = len(all_stories[story.story_id].viewers)
+                    viewers = {RankedUser.from_dict_and_rank(x['node'], index + previous_viewers_amount + 1) for index, x in
+                               enumerate(viewers_edges)}
+                    all_stories[story.story_id].update_viewers(viewers)
 
-            if len(next_cursors) == 0:
-                # No story has more viewers
-                break
-            next_cursor = next_cursors[0]  # If more than 1 exist, they will be the same
-            request_url = self.create_url(QueryHashes.STORY_VIEWERS, my_user_id, next_cursor)
+                if len(next_cursors) == 0:
+                    # No story has more viewers
+                    break
+                next_cursor = next_cursors[0]  # If more than 1 exist, they will be the same
+                request_url = self.create_url(QueryHashes.STORY_VIEWERS, my_user_id, next_cursor)
 
         return StoryScraping(list(all_stories.values()), scrape_id, scrape_ts)
 

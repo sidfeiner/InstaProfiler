@@ -7,7 +7,7 @@ import fire
 from InstaProfiler.common.LoggerManager import LoggerManager
 from InstaProfiler.common.MySQL import MySQLHelper
 from InstaProfiler.common.base import Serializable, InstaUser
-from InstaProfiler.reports.base import AsTableRow, HTMLTableConverter, AsGroupedTableRow
+from InstaProfiler.reports.base import AsTableRow, HTMLTableConverter, AsGroupedTableRow, Report
 from InstaProfiler.reports.export.SendGridExporter import SendGridExporter
 from InstaProfiler.scrapers.common.UserFollowsScraper import FOLLOW_TYPE_IDS
 
@@ -106,25 +106,10 @@ class TrendingFollowEventRow(AsGroupedTableRow):
         ) for src_user in event.src_users]
 
 
-class MutualFollowEventReport(object):
+class MutualFollowEventReport(Report):
     def __init__(self, log_path: Optional[str] = None, log_level: Union[str, int] = logging.DEBUG,
                  log_to_console: bool = True):
-        LoggerManager.init(log_path, level=log_level, with_console=log_to_console)
-        self.logger = LoggerManager.get_logger(__name__)
-
-    @staticmethod
-    def build_ts_filter(from_date: Optional[datetime], to_date: Optional[datetime],
-                        days_back: Optional[int] = None, ts_col: str = "ts") -> Tuple[str, Optional[list]]:
-        assert from_date is not None or to_date is not None or days_back is not None
-        if days_back is not None:
-            return "{0} > DATE_SUB(CURRENT_TIMESTAMP, INTERVAL {1} DAY)".format(ts_col, days_back), []
-        if from_date is not None and to_date is not None:
-            return "{0} between ? and ?".format(ts_col), [from_date, to_date]
-        # If code here is reached, either from_date or to_date are not None
-        if from_date is not None:
-            return "{0} >= ?".format(ts_col), [from_date]
-        else:
-            return "{0} <= ?".format(ts_col), [to_date]
+        super().__init__(log_path, log_level, log_to_console)
 
     def find_mutual_event_type(self, mysql: MySQLHelper, from_date: Optional[datetime], to_date: Optional[datetime],
                                mutual_event_timeframe_days: int, days_back: Optional[int] = None) -> Set[
@@ -189,7 +174,7 @@ class MutualFollowEventReport(object):
             from follow_events
             where {ts_filter}
             group by dst_user_name, follow_type_id
-            having count(*) > 50
+            having count(*) > 1
             order by cnt desc;
         """.format(ts_filter=ts_filter)
 
@@ -257,14 +242,7 @@ class MutualFollowEventReport(object):
     def get_mutual_follow_events(self, mysql: MySQLHelper, from_date: Optional[datetime], to_date: Optional[datetime],
                                  mutual_event_timeframe_days: Optional[int], days_back: Optional[int]) -> Tuple[
         List[MutualFollowEvent], List[MutualFollowEvent]]:
-        # mutual_events = self.find_mutual_event_type(mysql, from_date, to_date, mutual_event_timeframe_days, days_back)
-
-        mutual_events = (
-            MutualFollowEvent(UserEvent(InstaUser(1, "1", ), datetime.now(), 1),
-                              UserEvent(InstaUser(2, "2"), datetime.now(), 1)),
-            MutualFollowEvent(UserEvent(InstaUser(2, "2", ), datetime.now(), 1),
-                              UserEvent(InstaUser(1, "1"), datetime.now(), 1))
-        )
+        mutual_events = self.find_mutual_event_type(mysql, from_date, to_date, mutual_event_timeframe_days, days_back)
         return self.group_by_event_id(mutual_events)
 
     def get_trending_follow_events(self, mysql: MySQLHelper, from_date: Optional[datetime], to_date: Optional[datetime],
@@ -285,8 +263,13 @@ class MutualFollowEventReport(object):
         mutual_follow_events, mutual_unfollow_events = self.get_mutual_follow_events(mysql, from_date, to_date,
                                                                                      mutual_event_timeframe_days,
                                                                                      days_back)
+
         trending_follow_events, trending_unfollow_events = self.get_trending_follow_events(mysql, from_date, to_date,
                                                                                            days_back)
+        self.logger.info("found %d mutual follow events and %d mutual unfollow events",
+                         len(mutual_follow_events), len(mutual_unfollow_events))
+        self.logger.info("found %d trending follow events and %d trending unfollow events", len(trending_follow_events),
+                         len(trending_unfollow_events))
 
         msg = self.prepare_mail(mutual_follow_events, mutual_unfollow_events, trending_follow_events,
                                 trending_unfollow_events)

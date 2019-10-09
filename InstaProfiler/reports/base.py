@@ -1,6 +1,10 @@
-from typing import Dict
+import logging
+from datetime import datetime
+from typing import Dict, Union
 from typing import List, Optional
 from typing import Tuple
+
+from InstaProfiler.common.LoggerManager import LoggerManager
 
 
 class AsTableRow(object):
@@ -8,6 +12,15 @@ class AsTableRow(object):
     def get_export_fields(cls) -> List[str]:
         raise NotImplementedError()
 
+class HTMLImage(object):
+    def __init__(self, url: str):
+        self.url = url
+
+    def as_html(self):
+        return '<img src="{}" />'.format(self.url)
+
+    def __repr__(self):
+        return self.as_html()
 
 class AsGroupedTableRow(AsTableRow):
     @classmethod
@@ -80,3 +93,23 @@ class HTMLTableConverter(object):
 
             rows.append("<tbody>{}</tbody>".format('\n'.join(group_rows)))
         return """<table rules="all" border="2">\n{0}\n</table>""".format('\n'.join(rows))
+
+class Report(object):
+    def __init__(self, log_path: Optional[str] = None, log_level: Union[str, int] = logging.DEBUG,
+                 log_to_console: bool = True):
+        LoggerManager.init(log_path, level=log_level, with_console=log_to_console)
+        self.logger = LoggerManager.get_logger(__name__)
+
+    @staticmethod
+    def build_ts_filter(from_date: Optional[datetime], to_date: Optional[datetime],
+                        days_back: Optional[int] = None, ts_col: str = "ts") -> Tuple[str, Optional[list]]:
+        assert from_date is not None or to_date is not None or days_back is not None
+        if days_back is not None:
+            return "{0} > DATE_SUB(CURRENT_TIMESTAMP, INTERVAL {1} DAY)".format(ts_col, days_back), []
+        if from_date is not None and to_date is not None:
+            return "{0} between ? and ?".format(ts_col), [from_date, to_date]
+        # If code here is reached, either from_date or to_date are not None
+        if from_date is not None:
+            return "{0} >= ?".format(ts_col), [from_date]
+        else:
+            return "{0} <= ?".format(ts_col), [to_date]

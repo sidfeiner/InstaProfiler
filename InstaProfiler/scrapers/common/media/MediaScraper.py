@@ -4,13 +4,14 @@ from datetime import datetime
 from typing import Dict, Union
 
 import fire
+from pyodbc import Row
 
 from InstaProfiler.common.LoggerManager import LoggerManager
 from InstaProfiler.common.MySQL import InsertableDuplicate, MySQLHelper
 import json
 from typing import List, Optional
 
-from InstaProfiler.common.base import InstaUser
+from InstaProfiler.common.base import InstaUser, Serializable
 from InstaProfiler.scrapers.common.InstagramScraper import InstagramScraper, QueryHashes
 from InstaProfiler.scrapers.common.media.LikersScraper import LikersScraper
 from InstaProfiler.scrapers.common.media.base import Media
@@ -99,7 +100,7 @@ class MediaScraper(InstagramScraper):
         return MediaLikersScraping(list(all_media.values()), scrape_id, scrape_ts)
 
 
-class MediaRecord(InsertableDuplicate):
+class MediaRecord(InsertableDuplicate, Serializable):
     def __init__(self, scrape_id: str, scrape_ts: datetime, media_id: int, media_type: str, taken_at_ts: datetime,
                  owner_user_name: str, owner_user_id: int, display_url: str, comments_amount: int,
                  likes_amount: int, taggees_amount: int):
@@ -126,6 +127,11 @@ class MediaRecord(InsertableDuplicate):
     def on_duplicate_update_params(self) -> List:
         return [self.comments_amount, self.likes_amount, self.taggees_amount, self.scrape_id, self.scrape_ts]
 
+    @classmethod
+    def from_row(cls, row: Row) -> 'MediaRecord':
+        row_as_dict = {col[0]: getattr(row, col[0]) for col in row.cursor_description}
+        return cls.from_dict(row_as_dict)  # type: Media
+
 
 class TaggeeRecord(InsertableDuplicate):
     def __init__(self, scrape_id: str, scrape_ts: datetime, media_id: int, media_type: str, media_owner_user_id: int,
@@ -150,6 +156,7 @@ class TaggeeRecord(InsertableDuplicate):
 
     def on_duplicate_update_params(self) -> List:
         return [self.scrape_id, self.scrape_ts]
+
 
 
 class MediaOperations:
