@@ -139,7 +139,6 @@ class MutualFollowEventReport(Report):
                 from follow_events fe1
                          join follow_events fe2 on fe1.dst_user_id = fe2.src_user_id
                     and fe1.src_user_id = fe2.dst_user_id and fe1.follow_type_id = fe2.follow_type_id
-                    and (fe1.src_user_name = 'edenamsalem1_' or fe2.src_user_name = 'edenamsalem1_')
                 where {ts_filter} and abs(timestampdiff(day, fe1.ts, fe2.ts)) < ?
         """.format(ts_filter=ts_filter)
 
@@ -271,15 +270,19 @@ class MutualFollowEventReport(Report):
         self.logger.info("found %d trending follow events and %d trending unfollow events", len(trending_follow_events),
                          len(trending_unfollow_events))
 
-        msg = self.prepare_mail(mutual_follow_events, mutual_unfollow_events, trending_follow_events,
-                                trending_unfollow_events)
+        if len(mutual_follow_events) > 0 or len(mutual_unfollow_events) >0 or len(trending_follow_events) > 0 or len(
+                trending_unfollow_events) > 0:
+            msg = self.prepare_mail(mutual_follow_events, mutual_unfollow_events, trending_follow_events,
+                                    trending_unfollow_events)
 
-        self.logger.info("Exporting email")
-        exporter = SendGridExporter()
-        resp = exporter.send_email('sidfeiner@gmail.com', ['sidfeiner@gmail.com'], 'גללתי ומצאתי - אחד על אחד',
-                                   html_content=msg)
+            self.logger.info("Exporting email")
+            exporter = SendGridExporter()
+            resp = exporter.send_email('sidfeiner@gmail.com', ['sidfeiner@gmail.com'], 'גללתי ומצאתי - אחד על אחד',
+                                       html_content=msg)
 
-        self.logger.info("Done exporting.")
+            self.logger.info("Done exporting.")
+        else:
+            self.logger.info("No data to send by mail")
 
 
 if __name__ == '__main__':

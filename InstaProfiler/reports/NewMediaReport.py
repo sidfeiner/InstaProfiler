@@ -86,14 +86,17 @@ class NewMediaReport(Report):
 
         new_media = self.get_new_media(mysql, from_date, to_date, days_back)
         self.logger.info("%d new media objects were found", len(new_media))
-        msg = self.prepare_mail(new_media)
+        if len(new_media) >0:
+            msg = self.prepare_mail(new_media)
 
-        self.logger.info("Exporting email")
-        exporter = SendGridExporter()
-        resp = exporter.send_email('sidfeiner@gmail.com', ['sidfeiner@gmail.com'], 'גללתי ומצאתי - פוסטים חדשים',
-                                   html_content=msg)
+            self.logger.info("Exporting email")
+            exporter = SendGridExporter()
+            resp = exporter.send_email('sidfeiner@gmail.com', ['sidfeiner@gmail.com'], 'גללתי ומצאתי - פוסטים חדשים',
+                                       html_content=msg)
 
-        self.logger.info("Done exporting.")
+            self.logger.info("Done exporting.")
+        else:
+            self.logger.info("No data to send.")
 
 
 if __name__ == '__main__':

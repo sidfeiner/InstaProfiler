@@ -5,4 +5,4 @@ conda activate insta
 cd /home/sid/personal/Projects/InstaProfiler
 python InstaProfiler/reports/MutualFollowEventReport.py main \
   --log-path /home/sid/personal/Projects/InstaProfiler/logs/report-mutual-events.log \
-  --days-back 3
+  --days-back 1
