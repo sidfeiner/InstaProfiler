@@ -16,7 +16,7 @@ UNFOLLOW_USERS_REGEX = re.compile(r"""dst_user_id in \((?P<users>.+?)\)""")
 class LogParser(object):
     @staticmethod
     def main():
-        with open('/home/sid/personal/Projects/InstaProfiler/logs/user-follows.log') as fp:
+        with open('/opt/InstaProfiler/logs/user-follows.log') as fp:
             txt = fp.read()
         matches = LOG_RECORD_REGEX.findall(txt)
         all_queries = []

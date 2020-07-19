@@ -15,7 +15,7 @@ from InstaProfiler.common.MySQL import MySQLHelper, InsertableDuplicate, Updatab
 from InstaProfiler.common.base import Serializable, InstaUser, UserDoesNotExist, InstaUserRecord
 from InstaProfiler.scrapers.common.InstagramScraper import InstagramScraper, QueryHashes, DEFAULT_USER_NAME
 
-LOG_PATH = "/home/sid/personal/Projects/InstaProfiler/logs/follows.log"
+LOG_PATH = "/opt/InstaProfiler/logs/follows.log"
 
 
 class UserFollows(Serializable):

@@ -12,4 +12,4 @@ flask_host = '0.0.0.0'
 client_id = '81c816e7c7414edcb82b19a9f40867c1'
 client_secret = 'a11fea78f15149f4bb98c78a8e2de159'
 
-logging_dir_prod = "/home/sid/personal/Projects/InstaProfiler/logs"
+logging_dir_prod = "/opt/InstaProfiler/logs"

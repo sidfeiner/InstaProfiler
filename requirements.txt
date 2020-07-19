@@ -1,6 +1,4 @@
 requests
-flask
-flask_mongoengine
 selenium
 pyodbc
 sendgrid
