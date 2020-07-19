@@ -10,7 +10,7 @@ from selenium.webdriver.remote.webdriver import WebDriver
 from InstaProfiler.common.LoggerManager import LoggerManager
 from InstaProfiler.common.base import InstaUser
 
-CHROME_DRIVER_PATH = '/home/sid/miniconda3/bin/chromedriver'
+CHROME_DRIVER_PATH = '/root/miniconda3/bin/chromedriver'
 LOGIN_BTN_XPATH = '//button[contains(text(), "Log in")]'
 LOGIN_USER_INPUT_XPATH = '//div[@id="email_container"]/input'
 LOGIN_PWD_INPUT_XPATH = '//input[@type="password"]'
