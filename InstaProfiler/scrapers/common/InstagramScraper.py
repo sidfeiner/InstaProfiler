@@ -101,10 +101,14 @@ class InstagramScraper(object):
         self.logger.info("Logging in...")
         self.to_home_page()
         sleep(2)
-        self.driver.find_element_by_xpath(LOGIN_BTN_XPATH).click()
-        self.driver.find_element_by_xpath(LOGIN_USER_INPUT_XPATH).send_keys(user)
-        self.driver.find_element_by_xpath(LOGIN_PWD_INPUT_XPATH).send_keys(password)
-        self.driver.find_element_by_xpath(LOGIN_SUBMIT_INPUT_XPATH).click()
+        try:
+            self.driver.find_element_by_xpath(LOGIN_BTN_XPATH).click()
+            self.driver.find_element_by_xpath(LOGIN_USER_INPUT_XPATH).send_keys(user)
+            self.driver.find_element_by_xpath(LOGIN_PWD_INPUT_XPATH).send_keys(password)
+            self.driver.find_element_by_xpath(LOGIN_SUBMIT_INPUT_XPATH).click()
+        except Exception as e:
+            self.logger.error("Failed finding xpath when source code is: {}", self.driver.page_source)
+            raise e
         sleep(3)
         els = self.driver.find_elements_by_xpath(LOGIN_AS_USER_BTN_XPATH)
         if len(els) > 0:
