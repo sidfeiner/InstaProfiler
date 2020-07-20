@@ -10,7 +10,7 @@ from selenium.webdriver.remote.webdriver import WebDriver
 from InstaProfiler.common.LoggerManager import LoggerManager
 from InstaProfiler.common.base import InstaUser
 
-CHROME_DRIVER_PATH = '/root/miniconda3/bin/chromedriver'
+CHROME_DRIVER_PATH = '/usr/bin/chromedriver'
 LOGIN_BTN_XPATH = '//button[contains(text(), "Log in")]'
 LOGIN_USER_INPUT_XPATH = '//div[@id="email_container"]/input'
 LOGIN_PWD_INPUT_XPATH = '//input[@type="password"]'
@@ -167,5 +167,7 @@ class InstagramScraper(object):
             self.logger.info('Initing driver...')
             opts = ChromeOptions()
             opts.add_argument('headless')
+            opts.add_argument('--no-sandbox')
+            opts.add_argument('--disable-dev-shm-usage')
             self.driver = Chrome(executable_path=CHROME_DRIVER_PATH, chrome_options=opts)
             self.login(DEFAULT_MAIL, DEFAULT_PWD, DEFAULT_COOKIES_PKL_FILE)
