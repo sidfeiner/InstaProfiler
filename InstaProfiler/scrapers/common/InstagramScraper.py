@@ -152,7 +152,7 @@ class InstagramScraper(object):
         if driver is None:
             self.init_driver()
             driver = self.driver
-        body = self.get_url_data('{0}/{1}/?__a=1'.format(self.INSTA_URL, user_name), lambda x: 'minutes' not in x,
+        body = self.get_url_data('{0}/{1}/?__a=1'.format(self.INSTA_URL, user_name), lambda x: not ('minutes' in x and len(x) <= 1000),
                                  max_retries, wait_seconds)
         try:
             user_data = json.loads(body)['graphql']['user']
